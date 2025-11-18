@@ -1,0 +1,30 @@
+# Core robotics and simulation
+numpy>=1.20.0
+mujoco>=2.3.0
+
+# Robosuite (local installation)
+-e external/robosuite
+
+# Deep learning
+torch>=2.0.0
+tensorboard
+
+# Computer vision and 3D reconstruction
+opencv-python>=4.5.0
+open3d>=0.15.0
+scipy>=1.7.0
+matplotlib
+
+# Reinforcement learning
+gymnasium
+stable-baselines3
+
+# Utilities
+pyyaml
+h5py
+imageio
+Pillow
+
+# Development and testing
+pytest
+pytest-cov
