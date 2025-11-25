@@ -5,13 +5,20 @@
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/frank-zillmann/tum-adlr-18
+git clone https://github.com/frank-zillmann/tum-adlr-18 --recursive
 cd tum-adlr-18
 ```
 
 2. Run the setup script:
 ```bash
 source ./install/setup.sh
+```
+
+### Known fixes:
+If you encounter errors with EGL (NVIDIA’s GPU offscreen rendering backend), install the following packages:
+```bash
+sudo apt update
+sudo apt install -y libegl1-mesa-dev libgles2-mesa-dev
 ```
 
 ## Usage
