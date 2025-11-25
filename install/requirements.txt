@@ -14,6 +14,7 @@ opencv-python>=4.5.0
 open3d>=0.15.0
 scipy>=1.7.0
 matplotlib
+mesh2sdf
 
 # Reinforcement learning
 gymnasium
