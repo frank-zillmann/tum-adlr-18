@@ -24,7 +24,8 @@ def test_compute_sdf(env, path_to_save="./data/sdf_output/"):
 
     # Extract static environment mesh
     print("\nExtracting static environment mesh...")
-    vertices, faces = env.get_static_env_mesh()
+    # Use collision geoms only (group 1+) to avoid duplicates
+    vertices, faces = env.get_static_env_mesh(geom_groups=[1])
 
     print(f"Extracted mesh: {len(vertices)} vertices, {len(faces)} faces")
     print(f"Vertex bounds: min={vertices.min(axis=0)}, max={vertices.max(axis=0)}")
