@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from skimage import measure
+import trimesh
 
 
 def test_render_sdf_mesh(
@@ -64,7 +65,7 @@ def test_render_sdf_mesh(
         ax1.set_ylabel("Y")
         ax1.set_zlabel("Z")
         ax1.set_title("Front View")
-        ax1.view_init(elev=15, azim=45)
+        ax1.view_init(elev=20, azim=0)
 
         # View 2: Top view
         ax2 = fig.add_subplot(132, projection="3d")
@@ -96,7 +97,7 @@ def test_render_sdf_mesh(
         ax3.set_ylabel("Y")
         ax3.set_zlabel("Z")
         ax3.set_title("Side View")
-        ax3.view_init(elev=0, azim=0)
+        ax3.view_init(elev=20, azim=90)
 
         plt.suptitle("Reconstructed Mesh from SDF")
         plt.tight_layout()
@@ -104,16 +105,19 @@ def test_render_sdf_mesh(
         print(f"Saved mesh rendering to '{path_to_save}sdf_mesh_rendering.png'")
         plt.close()
 
-        # Save mesh as OBJ file for external viewing
+        # Create trimesh object for professional mesh export
+        mesh_trimesh = trimesh.Trimesh(
+            vertices=vertices_world, faces=faces, vertex_normals=normals
+        )
+
+        # Save mesh in multiple formats
         obj_path = path_to_save + "sdf_mesh.obj"
-        with open(obj_path, "w") as f:
-            f.write("# Mesh extracted from SDF\n")
-            for v in vertices_world:
-                f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
-            for face in faces:
-                # OBJ indices start at 1
-                f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
+        mesh_trimesh.export(obj_path)
         print(f"Saved mesh as OBJ to '{obj_path}'")
+
+        stl_path = path_to_save + "sdf_mesh.stl"
+        mesh_trimesh.export(stl_path)
+        print(f"Saved mesh as STL to '{stl_path}'")
 
     except Exception as e:
         print(f"Error extracting mesh: {e}")

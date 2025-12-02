@@ -53,7 +53,7 @@ def main():
         test_visualize_observations(env)
 
         # Test 2: Compute SDF
-        sdf_grid, bbox_center, bbox_size = test_compute_sdf(env)
+        sdf_grid, bbox_center, bbox_size = test_compute_sdf(env, sdf_size=16)
 
         # Test 3: Render mesh from SDF
         test_render_sdf_mesh(env, sdf_grid, bbox_center, bbox_size)
