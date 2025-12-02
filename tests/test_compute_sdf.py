@@ -36,7 +36,13 @@ def test_compute_sdf(env, sdf_size, path_to_save="./data/sdf_output/"):
     bbox_center = (bbox_min + bbox_max) / 2
     bbox_size = (bbox_max - bbox_min).max()
 
-    print(f"Bounding box center: {bbox_center}, size: {bbox_size}")
+    # Add padding to bounding box to avoid cutting off surfaces at boundaries
+    padding = 0.05  # 5% padding on each side
+    bbox_size = bbox_size * (1 + 2 * padding)
+
+    print(
+        f"Bounding box center: {bbox_center}, size: {bbox_size} (with {padding*100:.0f}% padding)"
+    )
 
     vertices_normalized = (vertices - bbox_center) / (bbox_size / 2)
     print(
@@ -51,17 +57,6 @@ def test_compute_sdf(env, sdf_size, path_to_save="./data/sdf_output/"):
 
     print(f"SDF grid shape: {sdf_grid.shape}")
     print(f"SDF value range: [{sdf_grid.min():.3f}, {sdf_grid.max():.3f}]")
-
-    # Save SDF grid and metadata
-    np.save(path_to_save + "sdf_grid.npy", sdf_grid)
-    np.savez(
-        path_to_save + "sdf_metadata.npz",
-        bbox_center=bbox_center,
-        bbox_size=bbox_size,
-        sdf_size=sdf_size,
-    )
-    print(f"\nSaved SDF grid to '{path_to_save}sdf_grid.npy'")
-    print(f"Saved metadata to '{path_to_save}sdf_metadata.npz'")
 
     # Visualize SDF slices
     fig, axes = plt.subplots(3, 5, figsize=(20, 12))
