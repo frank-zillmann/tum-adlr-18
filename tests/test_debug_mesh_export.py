@@ -61,15 +61,8 @@ def debug_mesh_export():
         # Check if included
         included = body_name in object_body_names
 
-        # Determine if visual or collision
-        # Group 0 is typically visual, Group 1 is typically collision
-        # contype > 0 means it participates in collision detection
-        geom_role = "visual" if geom_group == 0 else f"collision(grp{geom_group})"
-        if geom_contype > 0:
-            geom_role += f" [contype={geom_contype}]"
-
         print(
-            f"  {geom_id}: body={body_name:30s} type={geom_type} {geom_role:25s} pos={geom_pos} {'[INCLUDED]' if included else ''}"
+            f"  {geom_id}: body={body_name:30s} type={geom_type} group={geom_group} contype={geom_contype} geom_conaffinity={geom_conaffinity} pos={geom_pos} {'[INCLUDED]' if included else ''}"
         )
 
     # Extract mesh and analyze
