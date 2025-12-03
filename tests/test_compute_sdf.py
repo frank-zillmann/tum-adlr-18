@@ -5,16 +5,19 @@ Test function to compute and visualize SDF from environment mesh.
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import mesh2sdf
 
 
-def test_compute_sdf(env, sdf_size, path_to_save="./data/sdf_output/"):
+def test_compute_sdf(env, path_to_save="./data/sdf_output/"):
     """
-    Extract environment mesh, compute SDF, and visualize slices.
+    Compute SDF using the environment's built-in method and visualize slices.
 
     Args:
         env: Reconstruct3D environment instance
+        sdf_size: Optional SDF grid resolution. If provided, temporarily overrides env.sdf_size.
         path_to_save: Directory to save SDF grid and visualization
+
+    Returns:
+        tuple: (sdf_grid, bbox_center, bbox_size) from the environment's object variables
     """
     print("\n" + "=" * 60)
     print("TEST 2: Computing SDF from Environment Mesh")
@@ -22,41 +25,19 @@ def test_compute_sdf(env, sdf_size, path_to_save="./data/sdf_output/"):
 
     os.makedirs(path_to_save, exist_ok=True)
 
-    # Extract static environment mesh
-    print("\nExtracting static environment mesh...")
-    # Use collision geoms only (group 1+) to avoid duplicates
-    vertices, faces = env.get_static_env_mesh(geom_groups=[1])
+    # Use the environment's built-in method to compute SDF
+    print("\nComputing SDF using env.compute_static_env_sdf()...")
+    env.compute_static_env_sdf(geom_groups=[1])
 
-    print(f"Extracted mesh: {len(vertices)} vertices, {len(faces)} faces")
-    print(f"Vertex bounds: min={vertices.min(axis=0)}, max={vertices.max(axis=0)}")
-
-    # Normalize vertices to [-1, 1] for mesh2sdf
-    bbox_min = vertices.min(axis=0)
-    bbox_max = vertices.max(axis=0)
-    bbox_center = (bbox_min + bbox_max) / 2
-    bbox_size = (bbox_max - bbox_min).max()
-
-    # Add padding to bounding box to avoid cutting off surfaces at boundaries
-    padding = 0.05  # 5% padding on each side
-    bbox_size = bbox_size * (1 + 2 * padding)
-
-    print(
-        f"Bounding box center: {bbox_center}, size: {bbox_size} (with {padding*100:.0f}% padding)"
-    )
-
-    vertices_normalized = (vertices - bbox_center) / (bbox_size / 2)
-    print(
-        f"Normalized vertices to range: [{vertices_normalized.min():.3f}, {vertices_normalized.max():.3f}]"
-    )
-
-    # Convert to SDF using mesh2sdf
-    print("\nConverting mesh to SDF...")
-    sdf_grid = mesh2sdf.compute(
-        vertices_normalized, faces, size=sdf_size, fix=False, return_mesh=False
-    )
+    # Access stored object variables
+    sdf_grid = env.sdf_grid
+    bbox_center = env.sdf_bbox_center
+    bbox_size = env.sdf_bbox_size
+    sdf_size = env.sdf_size
 
     print(f"SDF grid shape: {sdf_grid.shape}")
     print(f"SDF value range: [{sdf_grid.min():.3f}, {sdf_grid.max():.3f}]")
+    print(f"Bounding box center: {bbox_center}, size: {bbox_size}")
 
     # Visualize SDF slices
     fig, axes = plt.subplots(3, 5, figsize=(20, 12))
@@ -127,4 +108,4 @@ def test_compute_sdf(env, sdf_size, path_to_save="./data/sdf_output/"):
 
     print("\nSDF computation complete!")
 
-    return sdf_grid, bbox_center, bbox_size
+    return

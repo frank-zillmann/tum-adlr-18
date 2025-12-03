@@ -52,13 +52,16 @@ def main():
         # Test 1: Visualize observations
         test_visualize_observations(env)
 
-        # Test 2: Compute SDF
-        sdf_grid, bbox_center, bbox_size = test_compute_sdf(env, sdf_size=32)
+        # Test 2: Compute SDF (uses env.compute_static_env_sdf internally)
+        test_compute_sdf(env)
 
-        # Test 3: Render mesh from SDF
-        test_render_sdf_mesh(env, sdf_grid, bbox_center, bbox_size)
+        # Test 3: Reward function
+        test_reward(env)
 
-        # Test 4: Run dummy steps
+        # Test 4: Render mesh from SDF
+        test_render_sdf_mesh(env)
+
+        # Test 5: Run dummy steps
         test_run_dummy_steps(env, n_steps=3)
 
     finally:
