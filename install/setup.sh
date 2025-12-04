@@ -7,7 +7,7 @@ conda env create -f ./install/environment.yml
 # Activate the environment
 conda activate adlr
 
-# Install Python dependencies
+# Install Python dependencies (includes project in editable mode)
 echo "Installing Python dependencies..."
 pip install -r ./install/requirements.txt
 

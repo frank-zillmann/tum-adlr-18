@@ -9,9 +9,6 @@ import os
 import sys
 import numpy as np
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-
 import robosuite as suite
 from robosuite.controllers import load_composite_controller_config
 from robosuite.utils.camera_utils import (
