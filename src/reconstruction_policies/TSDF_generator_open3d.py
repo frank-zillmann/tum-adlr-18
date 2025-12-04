@@ -1,5 +1,14 @@
+from typing import Optional
+
 import numpy as np
 import open3d as o3d
+
+
+def get_default_device() -> str:
+    """Get the best available device (CUDA if available, else CPU)."""
+    if o3d.core.cuda.is_available():
+        return "CUDA:0"
+    return "CPU:0"
 
 
 class TSDF_generator_open3d:
@@ -9,6 +18,10 @@ class TSDF_generator_open3d:
     Uses the tensor-based VoxelBlockGrid API which supports depth-only integration
     without dummy color images.
 
+    Note: bbox_min/bbox_max are only used for the `get_sdf_grid()` method to define
+    the query region. The VoxelBlockGrid itself dynamically allocates voxel blocks
+    based on where depth observations fall.
+
     Note: The `get_sdf_grid` method approximates SDF by computing signed distances
     to the extracted mesh, which may differ from the internally stored TSDF values.
     """
@@ -17,29 +30,33 @@ class TSDF_generator_open3d:
         self,
         bbox_min: np.ndarray,
         bbox_max: np.ndarray,
-        voxel_size: float = 0.02,
-        sdf_trunc: float = 0.10,
-        device: str = "CPU:0",
+        voxel_size: float,
+        sdf_trunc: float,
+        device: Optional[str] = None,
     ):
         """
         Initialize TSDF generator.
 
         Args:
-            bbox_min: (3,) array, minimum corner of workspace bounding box in meters
-            bbox_max: (3,) array, maximum corner of workspace bounding box in meters
-            voxel_size: Size of voxel in meters (e.g., 0.02 = 2cm)
+            bbox_min: (3,) array, minimum corner of bounding box for SDF grid queries (meters)
+            bbox_max: (3,) array, maximum corner of bounding box for SDF grid queries (meters)
+            voxel_size: Size of voxel in meters
             sdf_trunc: Truncation distance for TSDF in meters. Controls how far from
                 surfaces we track signed distance. Larger values = more computation but
                 less truncation.
-            device: Device to use for computation ("CPU:0" or "CUDA:0")
+            device: Device to use for computation ("CPU:0" or "CUDA:0").
+                If None, automatically selects CUDA if available, else CPU.
         """
         self.bbox_min = np.asarray(bbox_min)
         self.bbox_max = np.asarray(bbox_max)
         self.voxel_size = voxel_size
         self.sdf_trunc = sdf_trunc
-        self.device = o3d.core.Device(device)
 
-        # Compute grid dimensions
+        # Auto-select device if not specified
+        device_str = device if device is not None else get_default_device()
+        self.device = o3d.core.Device(device_str)
+
+        # Compute grid dimensions (informational, for get_sdf_grid)
         self.volume_size = self.bbox_max - self.bbox_min
         self.grid_shape = np.ceil(self.volume_size / voxel_size).astype(int)
 
@@ -67,7 +84,7 @@ class TSDF_generator_open3d:
         depth: np.ndarray,
         camera_intrinsic: np.ndarray,
         camera_extrinsic: np.ndarray,
-        depth_trunc: float = 3.0,
+        depth_trunc: float,
         depth_scale: float = 1.0,
     ):
         """
@@ -97,12 +114,16 @@ class TSDF_generator_open3d:
             np.linalg.inv(camera_extrinsic).astype(np.float64), device=self.device
         )
 
+        # Compute truncation in voxels (trunc_voxel_multiplier)
+        trunc_voxel_multiplier = self.sdf_trunc / self.voxel_size
+
         # Get frustum block coordinates to determine which voxel blocks to update
         frustum_block_coords = self.volume.compute_unique_block_coordinates(
             depth_t, intrinsic_t, extrinsic_t, depth_scale, depth_trunc
         )
 
         # Integrate depth into volume (no color)
+        # Note: trunc_voxel_multiplier controls TSDF truncation distance in voxel units
         self.volume.integrate(
             frustum_block_coords,
             depth_t,
@@ -110,6 +131,7 @@ class TSDF_generator_open3d:
             extrinsic_t,
             depth_scale,
             depth_trunc,
+            trunc_voxel_multiplier,
         )
 
     def extract_mesh(self, weight_threshold: float = 3.0) -> o3d.geometry.TriangleMesh:
@@ -123,9 +145,14 @@ class TSDF_generator_open3d:
                 Higher values = more observations required = cleaner but potentially incomplete mesh.
 
         Returns:
-            mesh: Open3D TriangleMesh
+            mesh: Open3D TriangleMesh (empty mesh if no surface extracted)
         """
+
         mesh = self.volume.extract_triangle_mesh(weight_threshold=weight_threshold)
+        # Check if mesh has vertices before converting
+        if mesh.vertex.positions.shape[0] == 0:
+            print("Warning: No mesh vertices extracted from TSDF volume")
+            return o3d.geometry.TriangleMesh()
         mesh_legacy = mesh.to_legacy()
         mesh_legacy.compute_vertex_normals()
         return mesh_legacy
