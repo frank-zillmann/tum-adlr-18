@@ -4,11 +4,13 @@ import open3d as o3d
 
 class TSDF_generator_open3d:
     """
-    Generate Truncated Signed Distance Fields from RGB-D observations using Open3D.
+    Generate Truncated Signed Distance Fields from depth observations using Open3D.
 
-    Note: Open3D's ScalableTSDFVolume does NOT provide direct access to raw TSDF voxel values.
-    The `get_sdf_grid` method approximates SDF by computing signed distances to the extracted mesh,
-    which may differ from the internally stored TSDF values.
+    Uses the tensor-based VoxelBlockGrid API which supports depth-only integration
+    without dummy color images.
+
+    Note: The `get_sdf_grid` method approximates SDF by computing signed distances
+    to the extracted mesh, which may differ from the internally stored TSDF values.
     """
 
     def __init__(
@@ -17,6 +19,7 @@ class TSDF_generator_open3d:
         bbox_max: np.ndarray,
         voxel_size: float = 0.02,
         sdf_trunc: float = 0.10,
+        device: str = "CPU:0",
     ):
         """
         Initialize TSDF generator.
@@ -25,116 +28,129 @@ class TSDF_generator_open3d:
             bbox_min: (3,) array, minimum corner of workspace bounding box in meters
             bbox_max: (3,) array, maximum corner of workspace bounding box in meters
             voxel_size: Size of voxel in meters (e.g., 0.02 = 2cm)
-            sdf_trunc: Truncation distance for TSDF in meters. This determines how far
-                from surfaces we track signed distance values. Values beyond this are clamped.
+            sdf_trunc: Truncation distance for TSDF in meters. Controls how far from
+                surfaces we track signed distance. Larger values = more computation but
+                less truncation.
+            device: Device to use for computation ("CPU:0" or "CUDA:0")
         """
         self.bbox_min = np.asarray(bbox_min)
         self.bbox_max = np.asarray(bbox_max)
         self.voxel_size = voxel_size
         self.sdf_trunc = sdf_trunc
+        self.device = o3d.core.Device(device)
 
         # Compute grid dimensions
         self.volume_size = self.bbox_max - self.bbox_min
         self.grid_shape = np.ceil(self.volume_size / voxel_size).astype(int)
 
-        # Initialize Open3D TSDF volume
-        # Note: ScalableTSDFVolume doesn't use explicit bounds, it grows dynamically
-        # but we track bounds for our grid extraction
-        self.volume = o3d.pipelines.integration.ScalableTSDFVolume(
-            voxel_length=voxel_size,
-            sdf_trunc=sdf_trunc,
-            color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
+        # Block size for VoxelBlockGrid (typically 8 or 16)
+        self.block_resolution = 8
+
+        # Initialize the voxel block grid
+        self._init_volume()
+
+    def _init_volume(self):
+        """Initialize or reset the voxel block grid."""
+        # VoxelBlockGrid with only TSDF and weight (no color)
+        self.volume = o3d.t.geometry.VoxelBlockGrid(
+            attr_names=("tsdf", "weight"),
+            attr_dtypes=(o3d.core.float32, o3d.core.float32),
+            attr_channels=((1,), (1,)),
+            voxel_size=self.voxel_size,
+            block_resolution=self.block_resolution,
+            block_count=50000,  # Initial block count, grows as needed
+            device=self.device,
         )
 
-    def integrate_rgbd(
+    def integrate_depth(
         self,
-        rgb: np.ndarray,
         depth: np.ndarray,
         camera_intrinsic: np.ndarray,
         camera_extrinsic: np.ndarray,
         depth_trunc: float = 3.0,
+        depth_scale: float = 1.0,
     ):
         """
-        Integrate an RGB-D observation into the TSDF volume.
+        Integrate a depth observation into the TSDF volume.
 
         Args:
-            rgb: RGB image (H, W, 3) with values in [0, 255]. Used for colorizing the mesh.
-            depth: Depth map (H, W) in meters
+            depth: Depth map (H, W) in meters (if depth_scale=1.0)
             camera_intrinsic: 3x3 camera intrinsic matrix
             camera_extrinsic: 4x4 camera pose (camera to world transform)
-            depth_trunc: Maximum depth to integrate in meters (pixels farther are ignored)
+            depth_trunc: Maximum depth to integrate in meters. Depth pixels farther
+                than this are ignored (useful for filtering noisy far-field depth).
+            depth_scale: Scale factor to convert depth values to meters.
+                Use 1.0 if depth is already in meters, 1000.0 if in millimeters.
         """
-        h, w = depth.shape
-
-        # Create Open3D intrinsic
-        intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(
-            width=w,
-            height=h,
-            fx=camera_intrinsic[0, 0],
-            fy=camera_intrinsic[1, 1],
-            cx=camera_intrinsic[0, 2],
-            cy=camera_intrinsic[1, 2],
+        # Convert to tensor format
+        depth_t = o3d.t.geometry.Image(
+            o3d.core.Tensor(depth.astype(np.float32), device=self.device)
         )
 
-        # Convert numpy arrays to Open3D images
-        rgb_o3d = o3d.geometry.Image(rgb.astype(np.uint8))
-        depth_o3d = o3d.geometry.Image(depth.astype(np.float32))
-
-        # Create RGBD image
-        # depth_scale=1.0 means depth values are already in meters (no conversion needed)
-        # depth_trunc clips pixels with depth > depth_trunc
-        rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
-            rgb_o3d,
-            depth_o3d,
-            depth_scale=1.0,
-            depth_trunc=depth_trunc,
-            convert_rgb_to_intensity=False,
+        # Create intrinsic tensor (3x3)
+        intrinsic_t = o3d.core.Tensor(
+            camera_intrinsic.astype(np.float64), device=self.device
         )
 
-        # Integrate into volume
-        # Open3D expects world-to-camera transform (inverse of camera_extrinsic)
+        # Create extrinsic tensor (4x4) - world to camera
+        extrinsic_t = o3d.core.Tensor(
+            np.linalg.inv(camera_extrinsic).astype(np.float64), device=self.device
+        )
+
+        # Get frustum block coordinates to determine which voxel blocks to update
+        frustum_block_coords = self.volume.compute_unique_block_coordinates(
+            depth_t, intrinsic_t, extrinsic_t, depth_scale, depth_trunc
+        )
+
+        # Integrate depth into volume (no color)
         self.volume.integrate(
-            rgbd,
-            intrinsic_o3d,
-            np.linalg.inv(camera_extrinsic),
+            frustum_block_coords,
+            depth_t,
+            intrinsic_t,
+            extrinsic_t,
+            depth_scale,
+            depth_trunc,
         )
 
-    def extract_mesh(self) -> o3d.geometry.TriangleMesh:
+    def extract_mesh(self, weight_threshold: float = 3.0) -> o3d.geometry.TriangleMesh:
         """
         Extract triangle mesh from the TSDF volume using marching cubes.
 
-        Returns:
-            mesh: Open3D TriangleMesh with vertex colors from integrated RGB
-        """
-        mesh = self.volume.extract_triangle_mesh()
-        mesh.compute_vertex_normals()
-        return mesh
+        Surface is extracted at SDF=0 (the zero-crossing).
 
-    def extract_point_cloud(self) -> o3d.geometry.PointCloud:
+        Args:
+            weight_threshold: Minimum weight for a voxel to be included in mesh extraction.
+                Higher values = more observations required = cleaner but potentially incomplete mesh.
+
+        Returns:
+            mesh: Open3D TriangleMesh
         """
-        Extract colored point cloud from the TSDF volume.
+        mesh = self.volume.extract_triangle_mesh(weight_threshold=weight_threshold)
+        mesh_legacy = mesh.to_legacy()
+        mesh_legacy.compute_vertex_normals()
+        return mesh_legacy
+
+    def extract_point_cloud(
+        self, weight_threshold: float = 3.0
+    ) -> o3d.geometry.PointCloud:
+        """
+        Extract point cloud from the TSDF volume.
+
+        Args:
+            weight_threshold: Minimum weight for a voxel to be included.
 
         Returns:
             pcd: Open3D PointCloud
         """
-        return self.volume.extract_point_cloud()
-
-    def extract_voxel_grid(self) -> o3d.geometry.VoxelGrid:
-        """
-        Extract voxel grid from the TSDF volume.
-
-        Returns:
-            voxel_grid: Open3D VoxelGrid
-        """
-        return self.volume.extract_voxel_grid()
+        pcd = self.volume.extract_point_cloud(weight_threshold=weight_threshold)
+        return pcd.to_legacy()
 
     def get_sdf_grid(self, grid_resolution: int) -> np.ndarray:
         """
         Get SDF values on a regular grid within the bounding box.
 
-        Note: This is an APPROXIMATION. Open3D's ScalableTSDFVolume doesn't expose
-        raw TSDF values, so we extract the mesh and compute signed distances to it.
-        This may differ from the internally stored truncated SDF values.
+        Note: This computes signed distances to the extracted mesh surface,
+        which approximates the TSDF but is not truncated.
 
         Args:
             grid_resolution: Number of points along each axis
@@ -155,9 +171,10 @@ class TSDF_generator_open3d:
 
         if len(mesh.vertices) == 0:
             # No mesh extracted yet, return large positive values (outside)
-            return (
-                np.ones((grid_resolution, grid_resolution, grid_resolution))
-                * self.sdf_trunc
+            return np.full(
+                (grid_resolution, grid_resolution, grid_resolution),
+                self.sdf_trunc,
+                dtype=np.float32,
             )
 
         # Create raycasting scene for distance queries
@@ -180,4 +197,4 @@ class TSDF_generator_open3d:
 
     def reset(self):
         """Reset the TSDF volume to empty state."""
-        self.volume.reset()
+        self._init_volume()
