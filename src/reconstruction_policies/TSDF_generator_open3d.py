@@ -158,7 +158,7 @@ class TSDF_generator_open3d:
         return mesh_legacy
 
     def extract_point_cloud(
-        self, weight_threshold: float = 3.0
+        self, weight_threshold: float = 0.0
     ) -> o3d.geometry.PointCloud:
         """
         Extract point cloud from the TSDF volume.
@@ -172,7 +172,9 @@ class TSDF_generator_open3d:
         pcd = self.volume.extract_point_cloud(weight_threshold=weight_threshold)
         return pcd.to_legacy()
 
-    def get_sdf_grid(self, grid_resolution: int) -> np.ndarray:
+    def get_sdf_grid(
+        self, grid_resolution: int, weight_threshold: float = 0.0
+    ) -> np.ndarray:
         """
         Get SDF values on a regular grid within the bounding box.
 
@@ -181,6 +183,7 @@ class TSDF_generator_open3d:
 
         Args:
             grid_resolution: Number of points along each axis
+            weight_threshold: Minimum weight for mesh extraction (default: 0.0)
 
         Returns:
             sdf_grid: (grid_resolution, grid_resolution, grid_resolution) array of SDF values
@@ -194,7 +197,7 @@ class TSDF_generator_open3d:
         query_points = np.stack([xx.ravel(), yy.ravel(), zz.ravel()], axis=1)
 
         # Extract mesh and compute signed distances
-        mesh = self.extract_mesh()
+        mesh = self.extract_mesh(weight_threshold=weight_threshold)
 
         if len(mesh.vertices) == 0:
             # No mesh extracted yet, return large positive values (outside)
@@ -222,101 +225,6 @@ class TSDF_generator_open3d:
 
         return sdf_grid
 
-    def get_native_tsdf_grid(
-        self, grid_resolution: int, weight_threshold: float = 0.0
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Get native TSDF values on a regular grid within the bounding box.
-
-        This extracts the actual truncated SDF values stored in the VoxelBlockGrid,
-        rather than computing distances to the mesh surface.
-
-        Args:
-            grid_resolution: Number of points along each axis
-            weight_threshold: Minimum weight for a voxel to be considered valid.
-                Voxels with lower weight are set to sdf_trunc (unknown/outside).
-
-        Returns:
-            tsdf_grid: (grid_resolution, grid_resolution, grid_resolution) array of TSDF values
-            weight_grid: (grid_resolution, grid_resolution, grid_resolution) array of weights
-        """
-        # Extract all voxel data from the volume
-        # This returns voxel coordinates and their TSDF/weight values
-        voxel_coords, voxel_indices = (
-            self.volume.voxel_coordinates_and_flattened_indices()
-        )
-
-        if voxel_coords.shape[0] == 0:
-            # No voxels integrated yet
-            tsdf_grid = np.full(
-                (grid_resolution, grid_resolution, grid_resolution),
-                self.sdf_trunc,
-                dtype=np.float32,
-            )
-            weight_grid = np.zeros_like(tsdf_grid)
-            return tsdf_grid, weight_grid
-
-        # Get the actual TSDF and weight values
-        # Get attribute tensors
-        tsdf_tensor = self.volume.attribute("tsdf")
-        weight_tensor = self.volume.attribute("weight")
-
-        # Convert voxel coordinates to numpy (these are in voxel units, not meters)
-        voxel_coords_np = voxel_coords.cpu().numpy()  # Shape: (N, 3)
-
-        # Get TSDF and weight values using flattened indices
-        tsdf_values = tsdf_tensor.reshape(-1).cpu().numpy()
-        weight_values = weight_tensor.reshape(-1).cpu().numpy()
-
-        # Use flattened indices to get values for each voxel coordinate
-        flat_indices = voxel_indices.cpu().numpy()
-        voxel_tsdf = tsdf_values[flat_indices]
-        voxel_weights = weight_values[flat_indices]
-
-        # Convert voxel coordinates to world coordinates
-        voxel_positions = voxel_coords_np * self.voxel_size  # Now in meters
-
-        # Create output grids
-        tsdf_grid = np.full(
-            (grid_resolution, grid_resolution, grid_resolution),
-            self.sdf_trunc,
-            dtype=np.float32,
-        )
-        weight_grid = np.zeros_like(tsdf_grid)
-
-        # Map voxel data to regular grid
-        # Compute grid indices for each voxel position
-        grid_step = self.volume_size / grid_resolution
-
-        for i in range(len(voxel_positions)):
-            pos = voxel_positions[i]
-            weight = voxel_weights[i]
-
-            if weight < weight_threshold:
-                continue
-
-            # Compute grid index
-            idx = ((pos - self.bbox_min) / grid_step).astype(int)
-
-            # Check bounds
-            if np.all(idx >= 0) and np.all(idx < grid_resolution):
-                ix, iy, iz = idx
-                # If multiple voxels map to same grid cell, use weighted average
-                if weight_grid[ix, iy, iz] == 0:
-                    tsdf_grid[ix, iy, iz] = voxel_tsdf[i]
-                    weight_grid[ix, iy, iz] = weight
-                else:
-                    # Weighted average
-                    old_w = weight_grid[ix, iy, iz]
-                    new_w = weight
-                    total_w = old_w + new_w
-                    tsdf_grid[ix, iy, iz] = (
-                        tsdf_grid[ix, iy, iz] * old_w + voxel_tsdf[i] * new_w
-                    ) / total_w
-                    weight_grid[ix, iy, iz] = total_w
-
-        return tsdf_grid, weight_grid
-
     def get_native_tsdf_points(
         self, weight_threshold: float = 0.0
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -325,11 +233,18 @@ class TSDF_generator_open3d:
 
         Returns sparse data (only voxels that have been observed).
 
+        **WARNING**: The returned positions are in VoxelBlockGrid's internal coordinate
+        system, NOT world coordinates. The voxel_coordinates_and_flattened_indices()
+        method returns coordinates relative to an internal grid origin (appears to be
+        near the first integrated observation), not the world origin or bbox_min.
+
+        For correct world-space coordinates, use extract_mesh() or get_sdf_grid().
+
         Args:
             weight_threshold: Minimum weight for a voxel to be returned.
 
         Returns:
-            positions: (N, 3) array of voxel center positions in meters
+            positions: (N, 3) array of voxel center positions (VoxelBlockGrid internal coordinates!)
             tsdf_values: (N,) array of TSDF values
             weights: (N,) array of integration weights
         """
@@ -354,8 +269,13 @@ class TSDF_generator_open3d:
         voxel_tsdf = tsdf_values[flat_indices]
         voxel_weights = weight_values[flat_indices]
 
-        # Convert voxel coordinates to world positions
+        # Convert voxel coordinates to positions
         voxel_coords_np = voxel_coords.cpu().numpy()
+
+        # NOTE: VoxelBlockGrid's voxel_coordinates_and_flattened_indices() returns
+        # coordinates in an internal sparse hashmap coordinate system. Multiplying
+        # by voxel_size gives metric positions, but they're relative to an arbitrary
+        # origin, not world coordinates.
         positions = voxel_coords_np * self.voxel_size
 
         # Filter by weight threshold
