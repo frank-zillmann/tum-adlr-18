@@ -7,6 +7,7 @@ and extracts the reconstructed mesh.
 
 import os
 import sys
+import time
 import numpy as np
 
 import robosuite as suite
@@ -18,6 +19,7 @@ from robosuite.utils.camera_utils import (
 )
 
 from src.reconstruction_policies.TSDF_generator_open3d import TSDF_generator_open3d
+from src.utils.plot_SDF_slices import plot_sdf_slices
 
 
 def test_tsdf_single_observation(save_dir: str = "./data/test_TSDF_generator/"):
@@ -137,6 +139,38 @@ def test_tsdf_single_observation(save_dir: str = "./data/test_TSDF_generator/"):
             print(f"\nMesh saved to: {mesh_path}")
         else:
             print("\nWarning: No mesh extracted (possibly no surface visible)")
+
+        # --- New: test native TSDF grid extraction ---
+        print("\nExtracting native TSDF grid from VoxelBlockGrid...")
+        grid_resolution = 16
+        t0 = time.time()
+        tsdf_grid, weight_grid = tsdf.get_native_tsdf_grid(
+            grid_resolution=grid_resolution, weight_threshold=0.0
+        )
+        dt = time.time() - t0
+        print(
+            f"Native TSDF grid shape: {tsdf_grid.shape}, weight grid shape: {weight_grid.shape}"
+        )
+        print(
+            f"TSDF grid stats: min={np.nanmin(tsdf_grid):.4f}, max={np.nanmax(tsdf_grid):.4f}"
+        )
+        print(
+            f"Weight grid stats: min={np.nanmin(weight_grid):.4f}, max={np.nanmax(weight_grid):.4f}"
+        )
+        print(f"Extraction took {dt:.3f} s")
+
+        # Save the grids for inspection
+        tsdf_npy_path = os.path.join(save_dir, "native_tsdf_grid.npy")
+        weight_npy_path = os.path.join(save_dir, "native_weight_grid.npy")
+        tsdf_plot_path = os.path.join(save_dir, "native_tsdf_slices.png")
+
+        np.save(tsdf_npy_path, tsdf_grid)
+        np.save(weight_npy_path, weight_grid)
+        plot_sdf_slices(tsdf_grid, tsdf_plot_path)
+
+        print(f"Saved TSDF grid to: {tsdf_npy_path}")
+        print(f"Saved weight grid to: {weight_npy_path}")
+        print(f"Saved TSDF slices plot to: {tsdf_plot_path}")
 
         print("\n" + "=" * 60)
         print("TEST COMPLETED SUCCESSFULLY!")
