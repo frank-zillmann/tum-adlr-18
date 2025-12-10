@@ -69,7 +69,7 @@ def debug_mesh_export():
     print("\n" + "=" * 60)
     print("Extracting mesh...")
     # Export only collision geoms (group 1+)
-    vertices, faces = env.get_static_env_mesh(geom_groups=[1])
+    vertices, faces = env.compute_static_env_mesh(geom_groups=[1])
 
     print(f"\nExtracted mesh statistics:")
     print(f"  Vertices: {len(vertices)}")

@@ -23,7 +23,7 @@ def test_reward(env):
 
     # Perfect match should give max reward
     gt_sdf = env.sdf_grid
-    reward_perfect = env.reward(input_sdf=gt_sdf)
+    reward_perfect = env.reward(reconstruction=gt_sdf)
     print(
         f"Reward (perfect match): {reward_perfect:.4f} (expected: {env.reward_scale})"
     )
@@ -33,7 +33,7 @@ def test_reward(env):
 
     # Noisy SDF should give lower reward
     noisy_sdf = gt_sdf + np.random.randn(*gt_sdf.shape) * 0.1
-    reward_noisy = env.reward(input_sdf=noisy_sdf)
+    reward_noisy = env.reward(reconstruction=noisy_sdf)
     print(f"Reward (noisy SDF): {reward_noisy:.4f}")
     assert reward_noisy < reward_perfect, "Noisy SDF should give lower reward"
 

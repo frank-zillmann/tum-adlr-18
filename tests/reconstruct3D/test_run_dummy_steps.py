@@ -32,10 +32,8 @@ def test_run_dummy_steps(env, n_steps=3):
 
         # Step environment
         obs, reward, done, info = env.step(action)
-        total_reward += reward
 
-        print(f"  Reward: {reward:.4f}")
+        print(f"  Reward: {reward}")
         print(f"  Done: {done}")
 
-    print(f"\nTotal reward over {n_steps} steps: {total_reward:.4f}")
     print("\nDummy steps complete!")

@@ -29,12 +29,7 @@ def test_compute_sdf(env, path_to_save="./data/sdf_output/"):
 
     # Use the environment's built-in method to compute SDF
     print("\nComputing SDF using env.compute_static_env_sdf()...")
-    env.compute_static_env_sdf(geom_groups=[1])
-
-    # Access stored object variables
-    sdf_grid = env.sdf_grid
-    bbox_center = env.sdf_bbox_center
-    bbox_size = env.sdf_bbox_size
+    sdf_grid, bbox_center, bbox_size = env.compute_static_env_sdf(geom_groups=[1])
     sdf_size = env.sdf_size
 
     print(f"SDF grid shape: {sdf_grid.shape}")
