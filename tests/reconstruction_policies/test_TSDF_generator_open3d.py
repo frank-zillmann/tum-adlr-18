@@ -150,11 +150,11 @@ def test_tsdf_single_observation(save_dir: str = "./data/test_TSDF_generator_ope
 
         # Integrate depth observation
         print("\nIntegrating depth observation...")
-        tsdf.integrate_depth(
-            depth=depth_real,
+        tsdf.add_obs(
             camera_intrinsic=intrinsic,
             camera_extrinsic=extrinsic,
-            depth_trunc=1.0,  # Ignore depth beyond 1m
+            depth_image=depth_real,
+            depth_max=1.0,  # Ignore depth beyond 1m
             depth_scale=1.0,  # Already in meters
         )
         print("Integration complete!")
@@ -229,7 +229,7 @@ def test_tsdf_single_observation(save_dir: str = "./data/test_TSDF_generator_ope
         t0 = time.time()
         sdf_grid = tsdf.get_sdf_grid(grid_resolution=grid_resolution)
         dt = time.time() - t0
-        
+
         print(f"SDF grid shape: {sdf_grid.shape}")
         print(
             f"SDF grid stats: min={np.nanmin(sdf_grid):.4f}, max={np.nanmax(sdf_grid):.4f}"

@@ -3,6 +3,8 @@ from typing import Optional
 import numpy as np
 import open3d as o3d
 
+from src.reconstruction_policies.base import BaseReconstructionPolicy
+
 
 def get_default_device() -> str:
     """Get the best available device (CUDA if available, else CPU)."""
@@ -11,7 +13,7 @@ def get_default_device() -> str:
     return "CPU:0"
 
 
-class TSDF_generator_open3d:
+class TSDF_generator_open3d(BaseReconstructionPolicy):
     """
     Generate Truncated Signed Distance Fields from depth observations using Open3D.
 
@@ -66,6 +68,8 @@ class TSDF_generator_open3d:
         # Initialize the voxel block grid
         self._init_volume()
 
+        super().__init__()
+
     def _init_volume(self):
         """Initialize or reset the voxel block grid."""
         # VoxelBlockGrid with only TSDF and weight (no color)
@@ -79,29 +83,35 @@ class TSDF_generator_open3d:
             device=self.device,
         )
 
-    def integrate_depth(
+    def add_obs(
         self,
-        depth: np.ndarray,
         camera_intrinsic: np.ndarray,
         camera_extrinsic: np.ndarray,
-        depth_trunc: float,
+        rgb_image: Optional[np.ndarray] = None,
+        depth_image: Optional[np.ndarray] = None,
+        depth_max: float = 1.0,
         depth_scale: float = 1.0,
+        **kwargs,
     ):
         """
-        Integrate a depth observation into the TSDF volume.
+        Add an observation (depth image) to the TSDF volume.
 
         Args:
-            depth: Depth map (H, W) in meters (if depth_scale=1.0)
             camera_intrinsic: 3x3 camera intrinsic matrix
             camera_extrinsic: 4x4 camera pose (camera to world transform)
-            depth_trunc: Maximum depth to integrate in meters. Depth pixels farther
+            rgb_image: RGB image (H, W, 3) - currently unused, for API compatibility
+            depth_image: Depth map (H, W) in meters (if depth_scale=1.0)
+            depth_max: Maximum depth to integrate in meters. Depth pixels farther
                 than this are ignored (useful for filtering noisy far-field depth).
             depth_scale: Scale factor to convert depth values to meters.
                 Use 1.0 if depth is already in meters, 1000.0 if in millimeters.
+            **kwargs: Additional arguments (ignored)
         """
+        if depth_image is None:
+            raise ValueError("depth_image is required for TSDF integration")
         # Convert to tensor format
         depth_t = o3d.t.geometry.Image(
-            o3d.core.Tensor(depth.astype(np.float32), device=self.device)
+            o3d.core.Tensor(depth_image.astype(np.float32), device=self.device)
         )
 
         # Create intrinsic tensor (3x3)
@@ -119,7 +129,7 @@ class TSDF_generator_open3d:
 
         # Get frustum block coordinates to determine which voxel blocks to update
         frustum_block_coords = self.volume.compute_unique_block_coordinates(
-            depth_t, intrinsic_t, extrinsic_t, depth_scale, depth_trunc
+            depth_t, intrinsic_t, extrinsic_t, depth_scale, depth_max
         )
 
         # Integrate depth into volume (no color)
@@ -130,9 +140,17 @@ class TSDF_generator_open3d:
             intrinsic_t,
             extrinsic_t,
             depth_scale,
-            depth_trunc,
+            depth_max,
             trunc_voxel_multiplier,
         )
+
+    def reconstruct(self, type=None, **kwargs):
+        if type == "mesh":
+            return self.extract_mesh(**kwargs)
+        elif type == "point_cloud":
+            return self.extract_point_cloud(**kwargs)
+        else:
+            raise ValueError(f"Unknown reconstruction type: {type}")
 
     def extract_mesh(self, weight_threshold: float = 3.0) -> o3d.geometry.TriangleMesh:
         """
@@ -283,6 +301,6 @@ class TSDF_generator_open3d:
 
         return positions[mask], voxel_tsdf[mask], voxel_weights[mask]
 
-    def reset(self):
+    def reset(self, **kwargs):
         """Reset the TSDF volume to empty state."""
         self._init_volume()
