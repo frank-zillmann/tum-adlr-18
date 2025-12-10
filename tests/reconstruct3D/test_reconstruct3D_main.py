@@ -13,6 +13,7 @@ from test_visualize_observations import test_visualize_observations
 from test_compute_sdf import test_compute_sdf
 from test_render_sdf_mesh import test_render_sdf_mesh
 from test_run_dummy_steps import test_run_dummy_steps
+from test_chamfer_distance import test_chamfer_distance
 
 
 def test_reward(env):
@@ -85,14 +86,14 @@ def main():
         # Test 3: Reward function
         test_reward(env)
 
-        # Test 4: Render mesh from SDF
+        # Test 4: Chamfer distance
+        test_chamfer_distance(env)
+
+        # Test 5: Render mesh from SDF
         test_render_sdf_mesh(env)
 
-        # Test 5: Run dummy steps
+        # Test 6: Run dummy steps
         test_run_dummy_steps(env, n_steps=3)
-
-        # Test 6: Test reward function
-        test_reward(env)
 
     finally:
         # Close environment
