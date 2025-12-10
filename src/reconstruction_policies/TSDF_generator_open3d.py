@@ -144,7 +144,7 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
             trunc_voxel_multiplier,
         )
 
-    def reconstruct(self, type=None, **kwargs):
+    def reconstruct(self, type="mesh", **kwargs):
         if type == "mesh":
             return self.extract_mesh(**kwargs)
         elif type == "point_cloud":
