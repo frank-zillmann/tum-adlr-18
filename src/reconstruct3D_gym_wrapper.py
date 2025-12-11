@@ -79,10 +79,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Initialize reconstruction policy
         self.reconstruction_policy = reconstruction_policy
 
-        # Define observation space: camera pose (pos: 3, quat: 4) = 7D
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
-        )
+        # Define observation space as Dict for flexibility
+        self.observation_space = spaces.Dict({
+            "camera_pose": spaces.Box(low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32),
+        })
 
         # Action space: use robot's native action space
         low, high = self.robot_env.action_spec
