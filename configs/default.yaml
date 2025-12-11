@@ -1,0 +1,9 @@
+# Default config - tuned for T4 GPU (4 cores, 32GB)
+# Only specify values you want to override; defaults in train_config.py apply
+
+# PPO - key params (rollout_buffer = n_steps * n_envs)
+n_steps: 512
+n_envs: 2
+
+total_timesteps: 100000
+log_dir: data/logs
