@@ -1,4 +1,5 @@
 # Fast debug config - for quick iteration
+# Only specify values you want to override; defaults in train_config.py apply
 total_timesteps: 1000
 n_steps: 128
 batch_size: 32
