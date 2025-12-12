@@ -62,7 +62,7 @@ def train(config: TrainConfig, checkpoint: str = None):
         model = PPO.load(checkpoint, env=train_env, tensorboard_log=str(log_dir))
     else:
         model = PPO(
-            "MlpPolicy",
+            "MultiInputPolicy",  # Required for Dict observation space
             train_env,
             policy_kwargs=policy_kwargs,
             learning_rate=config.lr,

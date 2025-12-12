@@ -152,28 +152,30 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
         else:
             raise ValueError(f"Unknown reconstruction type: {type}")
 
-    def extract_mesh(self, weight_threshold: float = 3.0) -> o3d.geometry.TriangleMesh:
+    def extract_mesh(self, weight_threshold: float = 3.0) -> tuple:
         """
         Extract triangle mesh from the TSDF volume using marching cubes.
 
-        Surface is extracted at SDF=0 (the zero-crossing).
-
-        Args:
-            weight_threshold: Minimum weight for a voxel to be included in mesh extraction.
-                Higher values = more observations required = cleaner but potentially incomplete mesh.
-
         Returns:
-            mesh: Open3D TriangleMesh (empty mesh if no surface extracted)
+            tuple: (vertices, faces) as numpy arrays, or (empty, empty) if no surface
         """
-
-        mesh = self.volume.extract_triangle_mesh(weight_threshold=weight_threshold)
-        # Check if mesh has vertices before converting
-        if mesh.vertex.positions.shape[0] == 0:
-            print("Warning: No mesh vertices extracted from TSDF volume")
-            return o3d.geometry.TriangleMesh()
-        mesh_legacy = mesh.to_legacy()
-        mesh_legacy.compute_vertex_normals()
-        return mesh_legacy
+        try:
+            mesh = self.volume.extract_triangle_mesh(weight_threshold=weight_threshold)
+            if mesh.vertex.positions.shape[0] == 0:
+                return (
+                    np.zeros((0, 3), dtype=np.float32),
+                    np.zeros((0, 3), dtype=np.int32),
+                )
+            mesh_legacy = mesh.to_legacy()
+            vertices = np.asarray(mesh_legacy.vertices, dtype=np.float32)
+            faces = np.asarray(mesh_legacy.triangles, dtype=np.int32)
+            return (vertices, faces)
+        except RuntimeError:
+            # Empty volume - return empty arrays
+            return (
+                np.zeros((0, 3), dtype=np.float32),
+                np.zeros((0, 3), dtype=np.int32),
+            )
 
     def extract_point_cloud(
         self, weight_threshold: float = 0.0
@@ -215,9 +217,9 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
         query_points = np.stack([xx.ravel(), yy.ravel(), zz.ravel()], axis=1)
 
         # Extract mesh and compute signed distances
-        mesh = self.extract_mesh(weight_threshold=weight_threshold)
+        vertices, faces = self.extract_mesh(weight_threshold=weight_threshold)
 
-        if len(mesh.vertices) == 0:
+        if len(vertices) == 0:
             # No mesh extracted yet, return large positive values (outside)
             return np.full(
                 (grid_resolution, grid_resolution, grid_resolution),
@@ -226,6 +228,9 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
             )
 
         # Create raycasting scene for distance queries
+        mesh = o3d.geometry.TriangleMesh()
+        mesh.vertices = o3d.utility.Vector3dVector(vertices)
+        mesh.triangles = o3d.utility.Vector3iVector(faces)
         mesh_t = o3d.t.geometry.TriangleMesh.from_legacy(mesh)
         scene = o3d.t.geometry.RaycastingScene()
         scene.add_triangles(mesh_t)
