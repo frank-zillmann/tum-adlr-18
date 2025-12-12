@@ -7,15 +7,15 @@ import yaml
 
 @dataclass
 class TrainConfig:
-    """Training configuration with sensible defaults for T4 GPU (4 cores, 32GB)."""
+    """Training configuration with sensible defaults."""
     # Environment
     horizon: int = 10
     camera_height: int = 128
     camera_width: int = 128
     
-    # PPO hyperparameters (see docstring below for explanation)
+    # PPO hyperparameters
     lr: float = 3e-4
-    n_steps: int = 512        # Steps per env before update (512 * n_envs = rollout buffer)
+    n_steps: int = 256        # Steps per env before update
     batch_size: int = 64      # Minibatch size for gradient updates
     n_epochs: int = 10        # Passes over rollout buffer per update
     gamma: float = 0.95       # Discount factor
@@ -29,7 +29,7 @@ class TrainConfig:
     
     # Training
     total_timesteps: int = 100_000
-    n_envs: int = 2           # Parallel envs (2-4 good for T4)
+    n_envs: int = 1           # Use 1 for safety, increase on powerful machines
     seed: int = 0
     
     # Logging
