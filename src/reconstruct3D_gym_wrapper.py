@@ -20,11 +20,19 @@ from src.reconstruction_policies.TSDF_generator_open3d import TSDF_generator_ope
 
 class Reconstruct3DGymWrapper(gym.Env):
     """
-    Gym-compatible wrapper combining robosuite reconstruct3D environment with reconstruction policy.
+    Gym-compatible wrapper combining robosuite environment with reconstruction policy.
 
     The RL agent controls camera trajectories to optimize 3D reconstruction quality.
-    Observation: camera pose (position + quaternion = 7D)
-    Action: delta camera pose (position + orientation deltas = 7D)
+
+    Observation (Dict):
+        - camera_pose: (7,) position (3) + quaternion wxyz (4)
+
+    Action:
+        - Uses OSC_POSE controller (Operational Space Control)
+        - 7D: position delta (3) + axis-angle rotation delta (3) + gripper (1)
+        - Deltas are in robot base frame, scaled from [-1,1] to physical limits
+        - Position: ±5cm, Rotation: ±0.5rad per step
+
     Reward: reconstruction quality (chamfer distance or SDF error)
     """
 
@@ -46,9 +54,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         self.mode = mode
         self._step_count = 0
 
-        # Initialize robot environment
+        # Use default Panda controller (BASIC with OSC_POSE)
+        # This gives delta control in base frame: [dx, dy, dz, dax, day, daz, gripper]
         controller_config = load_composite_controller_config(
-            controller="WHOLE_BODY_MINK_IK",
+            controller=None,  # Load default for robot
             robot="Panda",
         )
 
@@ -80,9 +89,13 @@ class Reconstruct3DGymWrapper(gym.Env):
         self.reconstruction_policy = reconstruction_policy
 
         # Define observation space as Dict for flexibility
-        self.observation_space = spaces.Dict({
-            "camera_pose": spaces.Box(low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32),
-        })
+        self.observation_space = spaces.Dict(
+            {
+                "camera_pose": spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
+                ),
+            }
+        )
 
         # Action space: use robot's native action space
         low, high = self.robot_env.action_spec
@@ -165,6 +178,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         self.robot_env.reset()
         self.reconstruction_policy.reset()
         self._step_count = 0
+
+        # Compute ground truth mesh and sdf for reward calculation
+        self.robot_env.compute_static_env_mesh()
+        self.robot_env.compute_static_env_sdf()
 
         return self._get_obs(), {}
 
