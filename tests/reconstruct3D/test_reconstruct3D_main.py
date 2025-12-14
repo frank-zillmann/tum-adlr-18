@@ -48,10 +48,9 @@ def main():
     print("RECONSTRUCT3D ENVIRONMENT TEST SUITE")
     print("=" * 60)
 
-    # Create environment with WHOLE_BODY_MINK_IK composite controller
+    # Create environment with default Panda controller (OSC_POSE)
     print("\nCreating environment...")
     controller_config = load_composite_controller_config(
-        controller="WHOLE_BODY_MINK_IK",
         robot="Panda",
     )
 

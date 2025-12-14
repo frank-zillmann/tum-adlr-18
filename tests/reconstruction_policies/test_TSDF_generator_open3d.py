@@ -41,10 +41,9 @@ def test_tsdf_single_observation(save_dir: str = "./data/test_TSDF_generator_ope
     camera_height = 128
     camera_width = 128
 
-    # Create environment
+    # Create environment with default Panda controller (OSC_POSE)
     print("\nCreating Reconstruct3D environment...")
     controller_config = load_composite_controller_config(
-        controller="WHOLE_BODY_MINK_IK",
         robot="Panda",
     )
 

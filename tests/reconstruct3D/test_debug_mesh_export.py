@@ -10,9 +10,8 @@ from robosuite.controllers import load_composite_controller_config
 def debug_mesh_export():
     """Debug mesh extraction to verify bodies and transformations."""
 
-    # Create environment
+    # Create environment with default Panda controller (OSC_POSE)
     controller_config = load_composite_controller_config(
-        controller="WHOLE_BODY_MINK_IK",
         robot="Panda",
     )
 
