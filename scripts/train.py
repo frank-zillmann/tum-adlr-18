@@ -9,6 +9,7 @@ from stable_baselines3.common.callbacks import (
     CheckpointCallback,
     EvalCallback,
     CallbackList,
+    BaseCallback,
 )
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
@@ -18,13 +19,58 @@ from src.robot_policies.feature_extractors import CameraPoseExtractor
 from configs.train_config import TrainConfig
 
 
-def make_env(mode: str, seed: int, horizon: int):
+def make_env(mode: str, seed: int, horizon: int, collect_timing: bool = False):
     def _init():
-        env = Monitor(Reconstruct3DGymWrapper(mode=mode, horizon=horizon))
+        env = Reconstruct3DGymWrapper(
+            mode=mode, horizon=horizon, collect_timing=collect_timing
+        )
+        env = Monitor(env)
         env.reset(seed=seed)
         return env
 
     return _init
+
+
+class TimingCallback(BaseCallback):
+    """Callback to save environment timing stats at the end of training."""
+
+    def __init__(self, log_dir: Path, verbose: int = 0):
+        super().__init__(verbose)
+        self.log_dir = log_dir
+
+    def _on_training_end(self) -> None:
+        """Save timing stats when training ends."""
+        # Access the unwrapped env to get timing stats
+        # For DummyVecEnv, we can access envs[0]
+        try:
+            env = self.training_env.envs[0]
+            # Unwrap Monitor to get the Reconstruct3DGymWrapper
+            while hasattr(env, "env"):
+                env = env.env
+
+            stats = env.get_timing_stats()
+            if stats and stats.n_steps > 0:
+                summary = stats.summary()
+                print(f"\n{'='*60}")
+                print("TRAINING TIMING STATS")
+                print(f"{'='*60}")
+                print(summary)
+
+                # Save to file
+                benchmark_path = self.log_dir / "timing_stats.txt"
+                with open(benchmark_path, "w") as f:
+                    f.write("Training Timing Statistics\n")
+                    f.write(f"{'='*40}\n\n")
+                    f.write(summary)
+                    f.write("\n")
+                print(f"\nTiming stats saved to: {benchmark_path}")
+                print(f"{'='*60}")
+        except Exception as e:
+            if self.verbose > 0:
+                print(f"Could not save timing stats: {e}")
+
+    def _on_step(self) -> bool:
+        return True
 
 
 def train(config: TrainConfig, checkpoint: str = None):
@@ -37,8 +83,12 @@ def train(config: TrainConfig, checkpoint: str = None):
     # Save config
     config.save(str(log_dir / "config.yaml"))
 
-    # Create environments
-    env_fn = lambda i: make_env("train", i, config.horizon)
+    # Create environments (with timing collection if benchmark enabled)
+    # Note: timing only works with DummyVecEnv (n_envs=1), not SubprocVecEnv
+    collect_timing = config.benchmark and config.n_envs == 1
+    env_fn = lambda i: make_env(
+        "train", i, config.horizon, collect_timing=collect_timing
+    )
     train_env = (
         SubprocVecEnv([env_fn(i) for i in range(config.n_envs)])
         if config.n_envs > 1
@@ -79,21 +129,25 @@ def train(config: TrainConfig, checkpoint: str = None):
         )
 
     # Callbacks
-    callbacks = CallbackList(
-        [
-            CheckpointCallback(
-                save_freq=config.checkpoint_freq,
-                save_path=str(log_dir / "checkpoints"),
-                name_prefix="model",
-            ),
-            EvalCallback(
-                eval_env,
-                best_model_save_path=str(log_dir / "best"),
-                eval_freq=config.eval_freq,
-                n_eval_episodes=config.n_eval_episodes,
-            ),
-        ]
-    )
+    callback_list = [
+        CheckpointCallback(
+            save_freq=config.checkpoint_freq,
+            save_path=str(log_dir / "checkpoints"),
+            name_prefix="model",
+        ),
+        EvalCallback(
+            eval_env,
+            best_model_save_path=str(log_dir / "best"),
+            eval_freq=config.eval_freq,
+            n_eval_episodes=config.n_eval_episodes,
+        ),
+    ]
+
+    # Add timing callback if benchmarking
+    if collect_timing:
+        callback_list.append(TimingCallback(log_dir))
+
+    callbacks = CallbackList(callback_list)
 
     # Train
     print(f"Training for {config.total_timesteps} steps. Logs: {log_dir}")

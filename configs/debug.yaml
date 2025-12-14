@@ -4,10 +4,8 @@ n_envs: 1
 n_steps: 32
 batch_size: 32
 total_timesteps: 200
-horizon: 5
-camera_height: 64
-camera_width: 64
 checkpoint_freq: 100
 eval_freq: 100
 n_eval_episodes: 1
 log_dir: data/debug-logs
+benchmark: true

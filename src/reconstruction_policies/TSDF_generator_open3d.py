@@ -128,9 +128,16 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
         trunc_voxel_multiplier = self.sdf_trunc / self.voxel_size
 
         # Get frustum block coordinates to determine which voxel blocks to update
-        frustum_block_coords = self.volume.compute_unique_block_coordinates(
-            depth_t, intrinsic_t, extrinsic_t, depth_scale, depth_max
-        )
+        # This may fail if no voxels are within the depth range (camera pointing at empty space)
+        try:
+            frustum_block_coords = self.volume.compute_unique_block_coordinates(
+                depth_t, intrinsic_t, extrinsic_t, depth_scale, depth_max
+            )
+        except RuntimeError as e:
+            if "No block is touched" in str(e):
+                # Camera is not seeing any geometry within depth range - skip this observation
+                return
+            raise
 
         # Integrate depth into volume (no color)
         # Note: trunc_voxel_multiplier controls TSDF truncation distance in voxel units
@@ -162,6 +169,7 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
         try:
             mesh = self.volume.extract_triangle_mesh(weight_threshold=weight_threshold)
             if mesh.vertex.positions.shape[0] == 0:
+                # Empty volume - return empty arrays
                 return (
                     np.zeros((0, 3), dtype=np.float32),
                     np.zeros((0, 3), dtype=np.int32),
