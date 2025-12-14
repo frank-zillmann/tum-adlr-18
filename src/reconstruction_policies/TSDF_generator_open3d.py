@@ -159,9 +159,14 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
         else:
             raise ValueError(f"Unknown reconstruction type: {type}")
 
-    def extract_mesh(self, weight_threshold: float = 3.0) -> tuple:
+    def extract_mesh(self, weight_threshold: float = 1.0) -> tuple:
         """
         Extract triangle mesh from the TSDF volume using marching cubes.
+
+        Args:
+            weight_threshold: Minimum integration weight for a voxel to be included.
+                Lower values include voxels seen fewer times (noisier but faster start).
+                Default 1.0 means voxel must be seen at least once.
 
         Returns:
             tuple: (vertices, faces) as numpy arrays, or (empty, empty) if no surface
