@@ -1,10 +1,12 @@
 """Gym-compatible wrapper for 3D reconstruction RL environment."""
 
 import time
+from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 from dataclasses import dataclass
 
 import numpy as np
+import matplotlib.pyplot as plt
 import gymnasium as gym
 from gymnasium import spaces
 
@@ -18,6 +20,7 @@ from robosuite.utils.camera_utils import (
 
 from src.reconstruction_policies.base import BaseReconstructionPolicy
 from src.reconstruction_policies.TSDF_generator_open3d import TSDF_generator_open3d
+from src.utils.render_mesh import save_mesh_rendering
 
 
 @dataclass
@@ -100,18 +103,24 @@ class Reconstruct3DGymWrapper(gym.Env):
         reconstruction_policy: BaseReconstructionPolicy = TSDF_generator_open3d(
             bbox_min=np.array([-0.5, -0.5, 0.5]),
             bbox_max=np.array([0.5, 0.5, 1.5]),
-            voxel_size=0.05,
+            voxel_size=0.02,
             sdf_trunc=0.1,
         ),
         horizon=10,
         camera_height=128,
         camera_width=128,
         collect_timing=False,
+        eval_log_dir: Optional[Path] = None,
     ):
         self.mode = mode
         self._step_count = 0
         self.collect_timing = collect_timing
         self.timing_stats = TimingStats() if collect_timing else None
+
+        # Evaluation logging (only active in val mode with log_dir set)
+        self.eval_log_dir = Path(eval_log_dir) if eval_log_dir else None
+        self._eval_episode_count = 0
+        self._eval_buffer = []  # Buffer step data during episode, save at end
 
         # Use default Panda controller (BASIC with OSC_POSE)
         # This gives delta control in base frame: [dx, dy, dz, dax, day, daz, gripper]
@@ -226,9 +235,26 @@ class Reconstruct3DGymWrapper(gym.Env):
             self.timing_stats.reward_total += time.perf_counter() - t0
             self.timing_stats.n_steps += 1
 
+        # Buffer evaluation data (val mode with log_dir) - save at episode end
+        if self.eval_log_dir is not None:
+            self._eval_buffer.append(
+                {
+                    "step": self._step_count,
+                    "rgb": rgb_image.copy() if rgb_image is not None else None,
+                    "depth": depth_image.copy() if depth_image is not None else None,
+                    "vertices": reconstruction[0].copy(),
+                    "faces": reconstruction[1].copy(),
+                    "reward": reward,
+                }
+            )
+
         # Episode termination
         terminated = done
         truncated = self._step_count >= self.robot_env.horizon
+
+        # Save buffered eval data at end of episode
+        if self.eval_log_dir is not None and (terminated or truncated):
+            self._save_episode_data()
 
         obs = self._get_obs()
 
@@ -241,6 +267,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         super().reset(seed=seed)
         if seed is not None:
             np.random.seed(seed)
+
+        # Clear eval buffer for new episode (counter incremented on save)
+        if self.eval_log_dir is not None:
+            self._eval_buffer.clear()
 
         # Reset robot environment (MuJoCo state)
         t0 = time.perf_counter()
@@ -279,8 +309,49 @@ class Reconstruct3DGymWrapper(gym.Env):
 
     def render(self) -> Optional[np.ndarray]:
         """Render current camera view."""
-
         return self.robot_env.render()
+
+    def _save_episode_data(self):
+        """Save buffered evaluation data at end of episode."""
+        if not self._eval_buffer:
+            return
+
+        self._eval_episode_count += 1
+        episode_dir = self.eval_log_dir / f"episode_{self._eval_episode_count:04d}"
+        episode_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save rewards CSV
+        with open(episode_dir / "rewards.csv", "w") as f:
+            f.write("step,reward\n")
+            for data in self._eval_buffer:
+                f.write(f"{data['step']},{data['reward']:.6f}\n")
+
+        # Save images and mesh renders
+        for data in self._eval_buffer:
+            step = data["step"]
+
+            # RGB image (flip vertically - robosuite uses bottom-left origin)
+            if data["rgb"] is not None:
+                plt.imsave(
+                    episode_dir / f"step_{step:03d}_rgb.png", np.flipud(data["rgb"])
+                )
+
+            # Depth image
+            if data["depth"] is not None:
+                depth_2d = np.squeeze(data["depth"])
+                plt.imsave(
+                    episode_dir / f"step_{step:03d}_depth.png",
+                    np.flipud(depth_2d),
+                    cmap="viridis",
+                )
+
+            # Reconstruction mesh render
+            if len(data["vertices"]) > 0:
+                save_mesh_rendering(
+                    data["vertices"],
+                    data["faces"],
+                    episode_dir / f"step_{step:03d}_reconstruction.png",
+                )
 
     def close(self):
         """Clean up resources."""

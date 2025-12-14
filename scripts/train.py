@@ -19,10 +19,19 @@ from src.robot_policies.feature_extractors import CameraPoseExtractor
 from configs.train_config import TrainConfig
 
 
-def make_env(mode: str, seed: int, horizon: int, collect_timing: bool = False):
+def make_env(
+    mode: str,
+    seed: int,
+    horizon: int,
+    collect_timing: bool = False,
+    eval_log_dir=None,
+):
     def _init():
         env = Reconstruct3DGymWrapper(
-            mode=mode, horizon=horizon, collect_timing=collect_timing
+            mode=mode,
+            horizon=horizon,
+            collect_timing=collect_timing,
+            eval_log_dir=eval_log_dir,
         )
         env = Monitor(env)
         env.reset(seed=seed)
@@ -94,7 +103,11 @@ def train(config: TrainConfig, checkpoint: str = None):
         if config.n_envs > 1
         else DummyVecEnv([env_fn(0)])
     )
-    eval_env = DummyVecEnv([make_env("val", 42, config.horizon)])
+    # Eval env logs images and rewards to log_dir/eval_data/
+    eval_log_dir = log_dir / "eval_data"
+    eval_env = DummyVecEnv(
+        [make_env("val", 42, config.horizon, eval_log_dir=eval_log_dir)]
+    )
 
     # Policy kwargs
     policy_kwargs = {
