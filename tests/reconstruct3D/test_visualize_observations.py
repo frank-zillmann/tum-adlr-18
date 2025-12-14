@@ -8,7 +8,7 @@ import os
 from robosuite.utils.camera_utils import get_real_depth_map
 
 
-def test_visualize_observations(env, path_to_save="./data/test_reconstruct3D_env/"):
+def test_visualize_observations(env, path_to_save="./data/test_reconstruct3D_env/obs/"):
     """
     Visualize RGB and depth observations from all cameras.
 

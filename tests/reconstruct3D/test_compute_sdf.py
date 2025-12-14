@@ -9,7 +9,7 @@ import os
 from src.utils.plot_SDF_slices import plot_sdf_slices
 
 
-def test_compute_sdf(env, path_to_save="./data/sdf_output/"):
+def test_compute_sdf(env, path_to_save="./data/test_reconstruct3D_env/sdf_slices/"):
     """
     Compute SDF using the environment's built-in method and visualize slices.
 

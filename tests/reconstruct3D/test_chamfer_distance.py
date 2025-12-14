@@ -12,8 +12,8 @@ def test_chamfer_distance(env):
     print("=" * 60)
 
     # Get ground truth mesh from environment
-    gt_vertices = env.combined_vertices
-    gt_faces = env.combined_faces
+    gt_vertices = env.static_env_vertices
+    gt_faces = env.static_env_faces
 
     print(
         f"Ground truth mesh: {gt_vertices.shape[0]} vertices, {gt_faces.shape[0]} faces"
