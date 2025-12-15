@@ -1,69 +1,78 @@
-"""Utility for rendering 3D meshes to images using matplotlib."""
+"""Mesh rendering using Open3D's offscreen renderer (no OpenGL/EGL conflicts)."""
 
-from pathlib import Path
-from typing import Union, Optional, List, Tuple
+from typing import Tuple
 
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import open3d as o3d
 
 
-def save_mesh_rendering(
+def render_mesh(
     vertices: np.ndarray,
     faces: np.ndarray,
-    save_path: Union[str, Path],
-    views: List[Tuple[float, float]] = [
-        (20, 0),
-        (90, 0),
-        (20, 90),
-    ],  # Front, Top, Side
-    figsize: Tuple[int, int] = None,
-    dpi: int = 150,
-    title: str = None,
-):
+    extrinsic: np.ndarray,
+    intrinsic: np.ndarray,
+    resolution: Tuple[int, int] = (64, 64),
+    grayscale: bool = True,
+) -> np.ndarray:
     """
-    Render a triangle mesh and save directly to file.
+    Renders mesh using Open3D's offscreen renderer.
 
     Args:
-        vertices: (N, 3) array of vertex positions
-        faces: (M, 3) array of triangle face indices
-        save_path: Path to save the image
-        views: List of (elev, azim) tuples for multiple views. Default: single diagonal view
-        figsize: Figure size in inches. Default: (5, 5) for single view, (15, 5) for 3 views
-        dpi: Resolution of saved image
-        title: Optional title for the figure
+        vertices: (N, 3) vertex positions
+        faces: (M, 3) triangle indices
+        extrinsic: (4, 4) camera extrinsic matrix (world-to-camera)
+        intrinsic: (3, 3) camera intrinsic matrix
+        resolution: (H, W) output resolution
+        grayscale: If True, return grayscale image (H, W), else RGB (H, W, 3)
+
+    Returns:
+        Image array with values in [0, 1], shape (H, W) or (H, W, 3)
     """
+    H, W = resolution
+
+    # Handle empty mesh
     if len(vertices) == 0 or len(faces) == 0:
-        return
+        if grayscale:
+            return np.zeros((H, W), dtype=np.float32)
+        return np.zeros((H, W, 3), dtype=np.float32)
 
-    n_views = len(views)
-    if figsize is None:
-        figsize = (5 * n_views, 5)
+    # Create Open3D mesh
+    mesh = o3d.geometry.TriangleMesh()
+    mesh.vertices = o3d.utility.Vector3dVector(vertices.astype(np.float64))
+    mesh.triangles = o3d.utility.Vector3iVector(faces.astype(np.int32))
+    mesh.compute_vertex_normals()
 
-    fig = plt.figure(figsize=figsize)
+    # Paint mesh light gray for visibility
+    mesh.paint_uniform_color([0.7, 0.7, 0.7])
 
-    for i, (elev, azim) in enumerate(views):
-        ax = fig.add_subplot(1, n_views, i + 1, projection="3d")
+    # Create offscreen renderer
+    renderer = o3d.visualization.rendering.OffscreenRenderer(W, H)
+    renderer.scene.set_background([0.0, 0.0, 0.0, 1.0])  # Black background
 
-        # Create mesh collection
-        mesh = Poly3DCollection(
-            vertices[faces], alpha=0.7, edgecolor="k", linewidth=0.1
-        )
-        mesh.set_facecolor([0.5, 0.7, 1.0])
-        ax.add_collection3d(mesh)
+    # Add mesh to scene
+    material = o3d.visualization.rendering.MaterialRecord()
+    material.shader = "defaultLit"
+    renderer.scene.add_geometry("mesh", mesh, material)
 
-        # Set axis limits
-        ax.set_xlim(vertices[:, 0].min(), vertices[:, 0].max())
-        ax.set_ylim(vertices[:, 1].min(), vertices[:, 1].max())
-        ax.set_zlim(vertices[:, 2].min(), vertices[:, 2].max())
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
-        ax.view_init(elev=elev, azim=azim)
+    # Setup camera intrinsics
+    fx, fy = intrinsic[0, 0], intrinsic[1, 1]
+    cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+    intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(W, H, fx, fy, cx, cy)
 
-    if title:
-        plt.suptitle(title)
+    # Setup camera extrinsics (Open3D uses camera-to-world, so invert)
+    extrinsic_o3d = np.linalg.inv(extrinsic)
+    renderer.setup_camera(intrinsic_o3d, extrinsic_o3d)
 
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=dpi)
-    plt.close(fig)
+    # Add lighting
+    renderer.scene.scene.set_sun_light([0.0, 0.0, -1.0], [1.0, 1.0, 1.0], 75000)
+    renderer.scene.scene.enable_sun_light(True)
+
+    # Render
+    img = np.asarray(renderer.render_to_image())
+
+    # Convert to float [0, 1]
+    result = img.astype(np.float32) / 255.0
+
+    if grayscale:
+        return np.mean(result, axis=-1)
+    return result
