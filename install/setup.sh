@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Exit immediately if a command exits with a non-zero status
+set -e
+
 # Create conda environment
 echo "Creating conda environment 'adlr'..."
 conda env create -f ./install/environment.yml
