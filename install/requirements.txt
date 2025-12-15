@@ -23,6 +23,8 @@ mesh2sdf
 # Reinforcement learning
 gymnasium
 stable-baselines3
+tqdm
+rich
 
 # Utilities
 pyyaml
