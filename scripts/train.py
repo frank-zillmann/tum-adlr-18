@@ -111,19 +111,19 @@ def train(config: TrainConfig, checkpoint: str = None):
         [make_env("val", 42, config.horizon, eval_log_dir=eval_log_dir)]
     )
 
-    # # Policy kwargs
-    # policy_kwargs = {
-    #     "features_extractor_class": ReconstructionExtractor,
-    #     "features_extractor_kwargs": {"features_dim": config.features_dim},
-    #     "net_arch": config.hidden_dims,
-    # }
-
     # Policy kwargs
     policy_kwargs = {
-        "features_extractor_class": CameraPoseExtractor,
+        "features_extractor_class": ReconstructionExtractor,
         "features_extractor_kwargs": {"features_dim": config.features_dim},
         "net_arch": config.hidden_dims,
     }
+
+    # # Policy kwargs
+    # policy_kwargs = {
+    #     "features_extractor_class": CameraPoseExtractor,
+    #     "features_extractor_kwargs": {"features_dim": config.features_dim},
+    #     "net_arch": config.hidden_dims,
+    # }
 
     # Create or load model
     if checkpoint:

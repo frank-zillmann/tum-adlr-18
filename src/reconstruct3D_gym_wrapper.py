@@ -108,8 +108,8 @@ class Reconstruct3DGymWrapper(gym.Env):
         horizon=20,
         camera_height=128,
         camera_width=128,
-        render_height=128,
-        render_width=128,
+        render_height=64,
+        render_width=64,
         collect_timing=False,
         eval_log_dir: Optional[Path] = None,
     ):
