@@ -342,8 +342,11 @@ class Reconstruct3DGymWrapper(gym.Env):
         episode_dir.mkdir(parents=True, exist_ok=True)
 
         # Save rewards CSV
+        if not (episode_dir / "rewards.csv").exists():
+            with open(episode_dir / "rewards.csv", "w") as f:
+                f.write("step,reward\n")
         with open(episode_dir / "rewards.csv", "a") as f:
-            f.write(f"Step: {self.eval_step_count}, Reward: {reward:.6f}\n")
+            f.write(f"{self.eval_step_count},{reward}\n")
 
         # Save images and mesh renders
         for camera_name, obs in obs_dict.items():
