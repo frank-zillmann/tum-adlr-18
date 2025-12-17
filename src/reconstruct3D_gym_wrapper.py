@@ -20,7 +20,7 @@ from robosuite.utils.camera_utils import (
 
 from src.reconstruction_policies.base import BaseReconstructionPolicy
 from src.reconstruction_policies.TSDF_generator_open3d import TSDF_generator_open3d
-from src.utils.render_mesh import save_mesh_rendering
+from src.utils.render_mesh import render_mesh
 
 
 @dataclass
@@ -103,19 +103,26 @@ class Reconstruct3DGymWrapper(gym.Env):
         reconstruction_policy: BaseReconstructionPolicy = TSDF_generator_open3d(
             bbox_min=np.array([-0.5, -0.5, 0.5]),
             bbox_max=np.array([0.5, 0.5, 1.5]),
-            voxel_size=0.02,
-            sdf_trunc=0.1,
+            voxel_size=0.01,
+            sdf_trunc=0.5,
         ),
         horizon=10,
         camera_height=128,
         camera_width=128,
+        render_height=64,
+        render_width=64,
         collect_timing=False,
         eval_log_dir: Optional[Path] = None,
     ):
         self.mode = mode
         self._step_count = 0
         self.collect_timing = collect_timing
+        self.render_resolution = (render_height, render_width)
         self.timing_stats = TimingStats() if collect_timing else None
+        self._current_reconstruction = (
+            np.zeros((0, 3)),
+            np.zeros((0, 3), dtype=np.int64),
+        )
 
         # Evaluation logging (only active in val mode with log_dir set)
         self.eval_log_dir = Path(eval_log_dir) if eval_log_dir else None
@@ -129,17 +136,12 @@ class Reconstruct3DGymWrapper(gym.Env):
             robot="Panda",
         )
 
+        # Always include birdview for reconstruction rendering
+        # TODO: try to remove birdview camera in train mode as only extrinsic and intrinsic but not the simulation renderings are needed
         if self.mode == "train":
-            camera_names = [
-                "robot0_eye_in_hand",
-            ]
+            camera_names = ["robot0_eye_in_hand", "birdview"]
         elif self.mode == "val" or self.mode == "test":
-            camera_names = [
-                "robot0_eye_in_hand",
-                "frontview",
-                "birdview",
-                "sideview",
-            ]
+            camera_names = ["robot0_eye_in_hand", "birdview", "frontview", "sideview"]
         else:
             raise ValueError(f"Unknown type: {self.mode}")
 
@@ -156,11 +158,17 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Initialize reconstruction policy
         self.reconstruction_policy = reconstruction_policy
 
-        # Define observation space as Dict for flexibility
+        # Define observation space as Dict
         self.observation_space = spaces.Dict(
             {
                 "camera_pose": spaces.Box(
                     low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
+                ),
+                "reconstruction_render": spaces.Box(
+                    low=0.0,
+                    high=1.0,
+                    shape=(1, *self.render_resolution),
+                    dtype=np.float32,  # TODO: Correct? Why extra dimension of size 1?
                 ),
             }
         )
@@ -184,9 +192,26 @@ class Reconstruct3DGymWrapper(gym.Env):
         return np.concatenate([position, quat]).astype(np.float32)
 
     def _get_obs(self) -> Dict[str, np.ndarray]:
-        """Get current observation (camera pose)."""
-        obs = {"camera_pose": self._get_camera_pose()}
-        return obs
+        """Get current observation (camera pose + reconstruction render)."""
+        # Get birdview camera matrices for rendering reconstruction
+        intrinsic = get_camera_intrinsic_matrix(
+            self.robot_env.sim,
+            "birdview",
+            self.robot_env.camera_heights[0],
+            self.robot_env.camera_widths[0],
+        )
+        extrinsic = get_camera_extrinsic_matrix(self.robot_env.sim, "birdview")
+
+        # Render current reconstruction from birdview (grayscale for feature extraction)
+        vertices, faces = self._current_reconstruction
+        render = render_mesh(
+            vertices, faces, extrinsic, intrinsic, self.render_resolution, grayscale=True
+        )
+
+        return {
+            "camera_pose": self._get_camera_pose(),
+            "reconstruction_render": render[np.newaxis, :, :].astype(np.float32),
+        }
 
     def step(
         self, action: np.ndarray
@@ -230,6 +255,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
         reconstruction = self.reconstruction_policy.reconstruct()
+        self._current_reconstruction = reconstruction  # Store for obs
         reward = float(self.robot_env.reward(reconstruction=reconstruction))
         if self.collect_timing:
             self.timing_stats.reward_total += time.perf_counter() - t0
@@ -237,6 +263,16 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         # Buffer evaluation data (val mode with log_dir) - save at episode end
         if self.eval_log_dir is not None:
+            # Get birdview camera for reconstruction rendering
+            birdview_intrinsic = get_camera_intrinsic_matrix(
+                self.robot_env.sim,
+                "birdview",
+                self.robot_env.camera_heights[0],
+                self.robot_env.camera_widths[0],
+            )
+            birdview_extrinsic = get_camera_extrinsic_matrix(
+                self.robot_env.sim, "birdview"
+            )
             self._eval_buffer.append(
                 {
                     "step": self._step_count,
@@ -244,6 +280,8 @@ class Reconstruct3DGymWrapper(gym.Env):
                     "depth": depth_image.copy() if depth_image is not None else None,
                     "vertices": reconstruction[0].copy(),
                     "faces": reconstruction[1].copy(),
+                    "birdview_intrinsic": birdview_intrinsic.copy(),
+                    "birdview_extrinsic": birdview_extrinsic.copy(),
                     "reward": reward,
                 }
             )
@@ -281,6 +319,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Reset reconstruction policy (TSDF volume)
         t0 = time.perf_counter()
         self.reconstruction_policy.reset()
+        self._current_reconstruction = (
+            np.zeros((0, 3)),
+            np.zeros((0, 3), dtype=np.int64),
+        )
         if self.collect_timing:
             self.timing_stats.reset_reconstruction_total += time.perf_counter() - t0
 
@@ -345,12 +387,19 @@ class Reconstruct3DGymWrapper(gym.Env):
                     cmap="viridis",
                 )
 
-            # Reconstruction mesh render
+            # Reconstruction mesh render (RGB for visualization)
             if len(data["vertices"]) > 0:
-                save_mesh_rendering(
+                recon_rgb = render_mesh(
                     data["vertices"],
                     data["faces"],
+                    data["birdview_extrinsic"],
+                    data["birdview_intrinsic"],
+                    resolution=(128, 128),
+                    grayscale=False,
+                )
+                plt.imsave(
                     episode_dir / f"step_{step:03d}_reconstruction.png",
+                    recon_rgb,
                 )
 
     def close(self):

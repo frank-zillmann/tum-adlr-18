@@ -6,8 +6,9 @@ import numpy as np
 import os
 from skimage import measure
 import trimesh
+import matplotlib.pyplot as plt
 
-from src.utils.render_mesh import save_mesh_rendering
+from src.utils.render_mesh import render_mesh
 
 
 def test_render_sdf_mesh(
@@ -57,14 +58,33 @@ def test_render_sdf_mesh(
         f"Vertex bounds: min={vertices_world.min(axis=0)}, max={vertices_world.max(axis=0)}"
     )
 
-    # Render mesh from multiple views using utility function
-    save_mesh_rendering(
-        vertices_world,
-        faces,
-        save_path=path_to_save + "sdf_mesh_rendering.png",
-        title="Reconstructed Mesh from SDF",
+    # Get camera matrices for multiple views
+    from robosuite.utils.camera_utils import (
+        get_camera_intrinsic_matrix,
+        get_camera_extrinsic_matrix,
     )
-    print(f"Saved mesh rendering to '{path_to_save}sdf_mesh_rendering.png'")
+
+    # Render from multiple camera views
+    camera_names = ["birdview", "frontview", "sideview"]
+    for camera_name in camera_names:
+        try:
+            intrinsic = get_camera_intrinsic_matrix(env.sim, camera_name, 128, 128)
+            extrinsic = get_camera_extrinsic_matrix(env.sim, camera_name)
+
+            # Render and save (RGB)
+            rgb = render_mesh(
+                vertices_world,
+                faces,
+                extrinsic,
+                intrinsic,
+                resolution=(128, 128),
+                grayscale=False,
+            )
+            output_path = f"{path_to_save}sdf_mesh_{camera_name}.png"
+            plt.imsave(output_path, rgb)
+            print(f"Saved {camera_name} rendering to '{output_path}'")
+        except Exception as e:
+            print(f"Warning: Could not render from {camera_name}: {e}")
 
     # Create trimesh object for mesh export
     mesh_trimesh = trimesh.Trimesh(
