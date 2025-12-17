@@ -15,7 +15,10 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from src.reconstruct3D_gym_wrapper import Reconstruct3DGymWrapper
-from src.robot_policies.feature_extractors import ReconstructionExtractor
+from src.robot_policies.feature_extractors import (
+    CameraPoseExtractor,
+    ReconstructionExtractor,
+)
 from configs.train_config import TrainConfig
 
 
@@ -108,9 +111,16 @@ def train(config: TrainConfig, checkpoint: str = None):
         [make_env("val", 42, config.horizon, eval_log_dir=eval_log_dir)]
     )
 
+    # # Policy kwargs
+    # policy_kwargs = {
+    #     "features_extractor_class": ReconstructionExtractor,
+    #     "features_extractor_kwargs": {"features_dim": config.features_dim},
+    #     "net_arch": config.hidden_dims,
+    # }
+
     # Policy kwargs
     policy_kwargs = {
-        "features_extractor_class": ReconstructionExtractor,
+        "features_extractor_class": CameraPoseExtractor,
         "features_extractor_kwargs": {"features_dim": config.features_dim},
         "net_arch": config.hidden_dims,
     }

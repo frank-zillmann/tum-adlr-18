@@ -82,14 +82,15 @@ def render_mesh(
         material.shader = "defaultLit"
         renderer.scene.add_geometry("mesh", mesh, material)
 
-        # Setup camera intrinsics
+        # Setup camera intrinsics (must match render resolution)
         fx, fy = intrinsic[0, 0], intrinsic[1, 1]
         cx, cy = intrinsic[0, 2], intrinsic[1, 2]
         intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(W, H, fx, fy, cx, cy)
 
-        # Setup camera extrinsics (Open3D uses camera-to-world, so invert)
-        extrinsic_o3d = np.linalg.inv(extrinsic)
-        renderer.setup_camera(intrinsic_o3d, extrinsic_o3d)
+        # Setup camera extrinsics
+        # Note: robosuite's get_camera_extrinsic_matrix returns camera-to-world,
+        # which is exactly what Open3D's setup_camera expects
+        renderer.setup_camera(intrinsic_o3d, extrinsic)
 
         # Add lighting
         renderer.scene.scene.set_sun_light([0.0, 0.0, -1.0], [1.0, 1.0, 1.0], 75000)

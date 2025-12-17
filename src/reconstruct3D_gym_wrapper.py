@@ -108,13 +108,14 @@ class Reconstruct3DGymWrapper(gym.Env):
         horizon=10,
         camera_height=128,
         camera_width=128,
-        render_height=64,
-        render_width=64,
+        render_height=128,
+        render_width=128,
         collect_timing=False,
         eval_log_dir: Optional[Path] = None,
     ):
         self._step_count = 0
         self.collect_timing = collect_timing
+        self.camera_resolution = (camera_height, camera_width)
         self.render_resolution = (render_height, render_width)
         self.timing_stats = TimingStats() if collect_timing else None
 
@@ -192,11 +193,12 @@ class Reconstruct3DGymWrapper(gym.Env):
     def _get_obs(self, reconstruction) -> Dict[str, np.ndarray]:
         """Get current observation (camera pose + reconstruction render)."""
         # Get birdview camera matrices for rendering reconstruction
+        # Pass render resolution to get intrinsic matrix scaled appropriately
         intrinsic = get_camera_intrinsic_matrix(
             self.robot_env.sim,
             "birdview",
-            self.robot_env.camera_heights[0],
-            self.robot_env.camera_widths[0],
+            self.render_resolution[0],
+            self.render_resolution[1],
         )
         extrinsic = get_camera_extrinsic_matrix(self.robot_env.sim, "birdview")
 
@@ -348,8 +350,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             # RGB image
             if "image" in camera_name:
                 plt.imsave(
-                    episode_dir
-                    / f"step_{self.eval_step_count:03d}_{camera_name}.png",
+                    episode_dir / f"step_{self.eval_step_count:03d}_{camera_name}.png",
                     obs,
                 )
 
@@ -357,20 +358,19 @@ class Reconstruct3DGymWrapper(gym.Env):
             if "depth" in camera_name:
                 depth_2d = np.squeeze(obs)
                 plt.imsave(
-                    episode_dir
-                    / f"step_{self.eval_step_count:03d}_{camera_name}.png",
+                    episode_dir / f"step_{self.eval_step_count:03d}_{camera_name}.png",
                     depth_2d,
                     cmap="viridis",
                 )
 
         for camera_name in self.camera_names:
-            # Camera extrinsics
+            # Camera extrinsics and intrinsics (use render resolution for intrinsic)
             extrinsic = get_camera_extrinsic_matrix(self.robot_env.sim, camera_name)
             intrinsic = get_camera_intrinsic_matrix(
                 self.robot_env.sim,
                 camera_name,
-                self.robot_env.camera_heights[0],
-                self.robot_env.camera_widths[0],
+                self.render_resolution[0],
+                self.render_resolution[1],
             )
 
             rendered_reconstruction = render_mesh(
