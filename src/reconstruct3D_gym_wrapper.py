@@ -254,13 +254,15 @@ class Reconstruct3DGymWrapper(gym.Env):
             rgb_image=rgb_image,
             depth_image=depth_image,
         )
+        reconstruction = self.reconstruction_policy.reconstruct()
         if self.collect_timing:
             self.timing_stats.reconstruction_total += time.perf_counter() - t0
 
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
-        reconstruction = self.reconstruction_policy.reconstruct()
-        reward = float(self.robot_env.reward(reconstruction=reconstruction))
+        reward, error = self.robot_env.reward(
+            reconstruction=reconstruction, output_error=True
+        )
         if self.collect_timing:
             self.timing_stats.reward_total += time.perf_counter() - t0
             self.timing_stats.n_steps += 1
@@ -269,6 +271,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         if self.eval_mode:
             self._save_eval_data(
                 reward=reward,
+                error=error,
                 obs_dict=obs_dict,
                 reconstruction=reconstruction,
             )
@@ -336,7 +339,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         """Render current camera view."""
         return self.robot_env.render()
 
-    def _save_eval_data(self, reward, obs_dict, reconstruction):
+    def _save_eval_data(self, reward, error, obs_dict, reconstruction):
         """Save buffered evaluation data at end of episode."""
         episode_dir = self.eval_log_dir / f"episode_{self.eval_episode_count:04d}"
         episode_dir.mkdir(parents=True, exist_ok=True)
@@ -344,9 +347,9 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Save rewards CSV
         if not (episode_dir / "rewards.csv").exists():
             with open(episode_dir / "rewards.csv", "w") as f:
-                f.write("step,reward\n")
+                f.write("step,reward,error\n")
         with open(episode_dir / "rewards.csv", "a") as f:
-            f.write(f"{self.eval_step_count},{reward}\n")
+            f.write(f"{self.eval_step_count},{reward},{error}\n")
 
         # Save images and mesh renders
         for camera_name, obs in obs_dict.items():
