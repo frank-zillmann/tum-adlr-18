@@ -349,7 +349,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             if "image" in camera_name:
                 plt.imsave(
                     episode_dir
-                    / f"step_{self.eval_step_count:03d}_{camera_name}_rgb.png",
+                    / f"step_{self.eval_step_count:03d}_{camera_name}.png",
                     obs,
                 )
 
@@ -358,7 +358,7 @@ class Reconstruct3DGymWrapper(gym.Env):
                 depth_2d = np.squeeze(obs)
                 plt.imsave(
                     episode_dir
-                    / f"step_{self.eval_step_count:03d}_{camera_name}_depth.png",
+                    / f"step_{self.eval_step_count:03d}_{camera_name}.png",
                     depth_2d,
                     cmap="viridis",
                 )
@@ -373,7 +373,7 @@ class Reconstruct3DGymWrapper(gym.Env):
                 self.robot_env.camera_widths[0],
             )
 
-            rendered_rgb = render_mesh(
+            rendered_reconstruction = render_mesh(
                 reconstruction[0],
                 reconstruction[1],
                 extrinsic,
@@ -385,7 +385,21 @@ class Reconstruct3DGymWrapper(gym.Env):
             plt.imsave(
                 episode_dir
                 / f"step_{self.eval_step_count:03d}_{camera_name}_reconstruction.png",
-                rendered_rgb,
+                rendered_reconstruction,
+            )
+
+            rendered_gt = render_mesh(
+                self.robot_env.static_env_vertices,
+                self.robot_env.static_env_faces,
+                extrinsic,
+                intrinsic,
+                resolution=self.render_resolution,
+                grayscale=False,
+            )
+
+            plt.imsave(
+                episode_dir / f"step_{self.eval_step_count:03d}_{camera_name}_gt.png",
+                rendered_gt,
             )
 
     def close(self):
