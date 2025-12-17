@@ -114,6 +114,8 @@ class Reconstruct3DGymWrapper(gym.Env):
         eval_log_dir: Optional[Path] = None,
     ):
         self._step_count = 0
+        self._episode_count = 0
+
         self.collect_timing = collect_timing
         self.camera_resolution = (camera_height, camera_width)
         self.render_resolution = (render_height, render_width)
@@ -122,8 +124,6 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Evaluation logging (only active in val mode with log_dir set)
         self.eval_log_dir = Path(eval_log_dir) if eval_log_dir else None
         self.eval_mode = self.eval_log_dir is not None
-        self.eval_episode_count = 0
-        self.eval_step_count = 0
 
         # Use default Panda controller (BASIC with OSC_POSE)
         # This gives delta control in base frame: [dx, dy, dz, dax, day, daz, gripper]
@@ -233,6 +233,19 @@ class Reconstruct3DGymWrapper(gym.Env):
         rgb_image = obs_dict.get("robot0_eye_in_hand_image")
         depth_image = obs_dict.get("robot0_eye_in_hand_depth")
         if depth_image is not None:
+            if (
+                np.any(np.isnan(depth_image))
+                or np.any(depth_image < 0.0)
+                or np.any(depth_image > 1.0)
+            ):
+                # Log diagnostic info when problematic values are detected
+                n_nan = np.sum(np.isnan(depth_image))
+                n_invalid = np.sum((depth_image < 0.0) | (depth_image > 1.0))
+                print(
+                    f"[WARNING] Depth map has {n_nan} NaN values and {n_invalid} out-of-range values at step {self._step_count}"
+                )
+            depth_image = np.nan_to_num(depth_image, nan=1.0, posinf=1.0, neginf=0.0)
+            depth_image = np.clip(depth_image, 0.0, 1.0)
             depth_image = get_real_depth_map(self.robot_env.sim, depth_image)
 
         # Get camera intrinsics and extrinsics
@@ -275,7 +288,6 @@ class Reconstruct3DGymWrapper(gym.Env):
                 obs_dict=obs_dict,
                 reconstruction=reconstruction,
             )
-            self.eval_step_count += 1
 
         obs = self._get_obs(reconstruction=reconstruction)
 
@@ -302,6 +314,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             self.timing_stats.reset_reconstruction_total += time.perf_counter() - t0
 
         self._step_count = 0
+        self._episode_count += 1
 
         # Compute ground truth mesh for reward calculation (chamfer distance)
         t0 = time.perf_counter()
@@ -317,9 +330,6 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         if self.collect_timing:
             self.timing_stats.n_resets += 1
-
-        self.eval_episode_count += 1
-        self.eval_step_count = 0
 
         return (
             self._get_obs(
@@ -341,7 +351,7 @@ class Reconstruct3DGymWrapper(gym.Env):
 
     def _save_eval_data(self, reward, error, obs_dict, reconstruction):
         """Save buffered evaluation data at end of episode."""
-        episode_dir = self.eval_log_dir / f"episode_{self.eval_episode_count:04d}"
+        episode_dir = self.eval_log_dir / f"episode_{self._episode_count:04d}"
         episode_dir.mkdir(parents=True, exist_ok=True)
 
         # Save rewards CSV
@@ -349,14 +359,14 @@ class Reconstruct3DGymWrapper(gym.Env):
             with open(episode_dir / "rewards.csv", "w") as f:
                 f.write("step,reward,error\n")
         with open(episode_dir / "rewards.csv", "a") as f:
-            f.write(f"{self.eval_step_count},{reward},{error}\n")
+            f.write(f"{self._step_count},{reward},{error}\n")
 
         # Save images and mesh renders
         for camera_name, obs in obs_dict.items():
             # RGB image
             if "image" in camera_name:
                 plt.imsave(
-                    episode_dir / f"step_{self.eval_step_count:03d}_{camera_name}.png",
+                    episode_dir / f"step_{self._step_count:03d}_{camera_name}.png",
                     obs,
                 )
 
@@ -364,7 +374,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             if "depth" in camera_name:
                 depth_2d = np.squeeze(obs)
                 plt.imsave(
-                    episode_dir / f"step_{self.eval_step_count:03d}_{camera_name}.png",
+                    episode_dir / f"step_{self._step_count:03d}_{camera_name}.png",
                     depth_2d,
                     cmap="viridis",
                 )
@@ -390,7 +400,7 @@ class Reconstruct3DGymWrapper(gym.Env):
 
             plt.imsave(
                 episode_dir
-                / f"step_{self.eval_step_count:03d}_{camera_name}_reconstruction.png",
+                / f"step_{self._step_count:03d}_{camera_name}_reconstruction.png",
                 rendered_reconstruction,
             )
 
@@ -404,7 +414,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             )
 
             plt.imsave(
-                episode_dir / f"step_{self.eval_step_count:03d}_{camera_name}_gt.png",
+                episode_dir / f"step_{self._step_count:03d}_{camera_name}_gt.png",
                 rendered_gt,
             )
 

@@ -32,7 +32,7 @@ class CameraPoseExtractor(BaseFeaturesExtractor):
         return self.net(observations["camera_pose"])
 
 
-class ReconstructionExtractor(BaseFeaturesExtractor):
+class CameraPoseMeshRenderingExtractor(BaseFeaturesExtractor):
     """
     Feature extractor combining camera_pose + reconstruction render.
     Uses simple CNN for the depth render, MLP for pose, then concatenates.

@@ -17,7 +17,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from src.reconstruct3D_gym_wrapper import Reconstruct3DGymWrapper
 from src.robot_policies.feature_extractors import (
     CameraPoseExtractor,
-    ReconstructionExtractor,
+    CameraPoseMeshRenderingExtractor,
 )
 from configs.train_config import TrainConfig
 
@@ -113,7 +113,7 @@ def train(config: TrainConfig, checkpoint: str = None):
 
     # Policy kwargs
     policy_kwargs = {
-        "features_extractor_class": ReconstructionExtractor,
+        "features_extractor_class": CameraPoseMeshRenderingExtractor,
         "features_extractor_kwargs": {"features_dim": config.features_dim},
         "net_arch": config.hidden_dims,
     }
