@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
+import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import (
     CheckpointCallback,
@@ -125,10 +126,15 @@ def train(config: TrainConfig, checkpoint: str = None):
     #     "net_arch": config.hidden_dims,
     # }
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"[PyTorch/SB3] Using device: {device}")
+
     # Create or load model
     if checkpoint:
         print(f"Resuming from: {checkpoint}")
-        model = PPO.load(checkpoint, env=train_env, tensorboard_log=str(log_dir))
+        model = PPO.load(
+            checkpoint, env=train_env, tensorboard_log=str(log_dir), device=device
+        )
     else:
         model = PPO(
             "MultiInputPolicy",  # Required for Dict observation space
@@ -145,6 +151,7 @@ def train(config: TrainConfig, checkpoint: str = None):
             verbose=1,
             tensorboard_log=str(log_dir),
             seed=config.seed,
+            device=device,
         )
 
     # Callbacks

@@ -57,6 +57,7 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
         # Auto-select device if not specified
         device_str = device if device is not None else get_default_device()
         self.device = o3d.core.Device(device_str)
+        print(f"[Open3D TSDF] Using device: {device_str}")
 
         # Compute grid dimensions (informational, for get_sdf_grid)
         self.volume_size = self.bbox_max - self.bbox_min
