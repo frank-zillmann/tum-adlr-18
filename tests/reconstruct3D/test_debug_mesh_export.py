@@ -19,7 +19,6 @@ def debug_mesh_export():
         env_name="Reconstruct3D",
         robots="Panda",
         controller_configs=controller_config,
-        horizon=100,
     )
 
     # Reset environment

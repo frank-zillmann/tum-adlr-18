@@ -105,7 +105,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             voxel_size=0.01,
             sdf_trunc=0.5,
         ),
-        horizon=10,
+        horizon=20,
         camera_height=128,
         camera_width=128,
         render_height=128,

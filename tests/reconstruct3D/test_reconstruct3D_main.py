@@ -58,7 +58,6 @@ def main():
         env_name="Reconstruct3D",
         robots="Panda",
         controller_configs=controller_config,
-        horizon=100,
         camera_names=[
             "frontview",
             "birdview",

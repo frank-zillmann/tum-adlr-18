@@ -51,7 +51,6 @@ def test_tsdf_single_observation(save_dir: str = "./data/test_TSDF_generator_ope
         env_name="Reconstruct3D",
         robots="Panda",
         controller_configs=controller_config,
-        horizon=100,
         camera_names=[camera_name],
         camera_heights=camera_height,
         camera_widths=camera_width,
