@@ -40,6 +40,7 @@ def render_mesh(
     intrinsic: np.ndarray,
     resolution: Tuple[int, int] = (64, 64),
     grayscale: bool = True,
+    lighting: str = "ambient",
 ) -> np.ndarray:
     """
     Renders mesh using Open3D's offscreen renderer.
@@ -51,6 +52,9 @@ def render_mesh(
         intrinsic: (3, 3) camera intrinsic matrix
         resolution: (H, W) output resolution
         grayscale: If True, return grayscale image (H, W), else RGB (H, W, 3)
+        lighting: Lighting mode, one of:
+            - "unlit": Flat shading, no lighting (most consistent for NN input)
+            - "ambient": Soft ambient lighting only (uniform, no harsh shadows)
 
     Returns:
         Image array with values in [0, 1], shape (H, W) or (H, W, 3)
@@ -77,10 +81,27 @@ def render_mesh(
         renderer = o3d.visualization.rendering.OffscreenRenderer(W, H)
         renderer.scene.set_background([0.0, 0.0, 0.0, 1.0])  # Black background
 
-        # Add mesh to scene
+        # Add mesh to scene with appropriate shader
         material = o3d.visualization.rendering.MaterialRecord()
-        material.shader = "defaultLit"
+        if lighting == "unlit":
+            # Flat shading, no lighting (most consistent for neural network input)
+            material.shader = "defaultUnlit"
+        elif lighting == "ambient":
+            # Soft ambient lighting only
+            material.shader = "defaultLit"
+        else:
+            raise ValueError(
+                f"Unknown lighting mode: {lighting}. Use 'unlit' or 'ambient'."
+            )
         renderer.scene.add_geometry("mesh", mesh, material)
+
+        # Configure lighting
+        if lighting == "ambient":
+            # Disable sun light and use soft ambient lighting profile
+            renderer.scene.scene.enable_sun_light(False)
+            renderer.scene.set_lighting(
+                renderer.scene.LightingProfile.SOFT_SHADOWS, (0, 0, 0)
+            )
 
         # Setup camera intrinsics (must match render resolution)
         fx, fy = intrinsic[0, 0], intrinsic[1, 1]
@@ -92,10 +113,6 @@ def render_mesh(
         # Open3D's setup_camera expects world-to-camera (view matrix), so we invert
         extrinsic_w2c = np.linalg.inv(extrinsic)
         renderer.setup_camera(intrinsic_o3d, extrinsic_w2c)
-
-        # Add lighting
-        renderer.scene.scene.set_sun_light([0.0, 0.0, -1.0], [1.0, 1.0, 1.0], 75000)
-        renderer.scene.scene.enable_sun_light(True)
 
         # Render and copy result before destroying renderer
         img = np.asarray(renderer.render_to_image()).copy()
