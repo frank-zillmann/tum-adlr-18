@@ -41,20 +41,20 @@ class CameraPoseMeshRenderingExtractor(BaseFeaturesExtractor):
     def __init__(
         self,
         observation_space: gym.spaces.Dict,
-        features_dim: int = 64,
+        features_dim: int = 128,
     ):
         super().__init__(observation_space, features_dim)
 
         # CNN for reconstruction render (1, 64, 64) -> features
         self.cnn = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=4, stride=2, padding=1),  # -> 16x32x32
+            nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),  # -> 16x32x32
             nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=4, stride=2, padding=1),  # -> 32x16x16
+            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),  # -> 32x16x16
             nn.ReLU(),
-            nn.Conv2d(32, 32, kernel_size=4, stride=2, padding=1),  # -> 32x8x8
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # -> 32x8x8
             nn.ReLU(),
             nn.Flatten(),  # -> 32*8*8 = 2048
-            nn.Linear(2048, 64),
+            nn.Linear(4096, 128),
             nn.ReLU(),
         )
 
@@ -66,7 +66,7 @@ class CameraPoseMeshRenderingExtractor(BaseFeaturesExtractor):
 
         # Combine: 64 + 32 -> features_dim
         self.combine = nn.Sequential(
-            nn.Linear(96, features_dim),
+            nn.Linear(128+32, features_dim),
             nn.ReLU(),
         )
 

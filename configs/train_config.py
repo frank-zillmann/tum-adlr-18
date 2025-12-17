@@ -27,7 +27,7 @@ class TrainConfig:
 
     # Network
     features_dim: int = 64
-    hidden_dims: List[int] = field(default_factory=lambda: [64, 64])
+    hidden_dims: List[int] = field(default_factory=lambda: [128, 128])
 
     # Training
     total_timesteps: int = 100_000
