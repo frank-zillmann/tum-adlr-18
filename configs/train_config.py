@@ -26,7 +26,7 @@ class TrainConfig:
     ent_coef: float = 0.01  # Entropy bonus for exploration
 
     # Network
-    features_dim: int = 64
+    features_dim: int = 128
     hidden_dims: List[int] = field(default_factory=lambda: [128, 128])
 
     # Training

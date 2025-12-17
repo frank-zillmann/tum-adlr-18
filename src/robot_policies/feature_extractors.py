@@ -15,7 +15,7 @@ class CameraPoseExtractor(BaseFeaturesExtractor):
     def __init__(
         self,
         observation_space: gym.spaces.Dict,
-        features_dim: int = 64,
+        features_dim: int,
         hidden_dims: List[int] = [64, 64],
     ):
         super().__init__(observation_space, features_dim)
@@ -41,7 +41,7 @@ class CameraPoseMeshRenderingExtractor(BaseFeaturesExtractor):
     def __init__(
         self,
         observation_space: gym.spaces.Dict,
-        features_dim: int = 128,
+        features_dim: int,
     ):
         super().__init__(observation_space, features_dim)
 
@@ -66,7 +66,7 @@ class CameraPoseMeshRenderingExtractor(BaseFeaturesExtractor):
 
         # Combine: 64 + 32 -> features_dim
         self.combine = nn.Sequential(
-            nn.Linear(128+32, features_dim),
+            nn.Linear(128 + 32, features_dim),
             nn.ReLU(),
         )
 
