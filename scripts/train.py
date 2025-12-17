@@ -28,7 +28,6 @@ def make_env(
 ):
     def _init():
         env = Reconstruct3DGymWrapper(
-            mode=mode,
             horizon=horizon,
             collect_timing=collect_timing,
             eval_log_dir=eval_log_dir,

@@ -99,7 +99,6 @@ class Reconstruct3DGymWrapper(gym.Env):
 
     def __init__(
         self,
-        mode: str = "train",
         reconstruction_policy: BaseReconstructionPolicy = TSDF_generator_open3d(
             bbox_min=np.array([-0.5, -0.5, 0.5]),
             bbox_max=np.array([0.5, 0.5, 1.5]),
@@ -114,20 +113,16 @@ class Reconstruct3DGymWrapper(gym.Env):
         collect_timing=False,
         eval_log_dir: Optional[Path] = None,
     ):
-        self.mode = mode
         self._step_count = 0
         self.collect_timing = collect_timing
         self.render_resolution = (render_height, render_width)
         self.timing_stats = TimingStats() if collect_timing else None
-        self._current_reconstruction = (
-            np.zeros((0, 3)),
-            np.zeros((0, 3), dtype=np.int64),
-        )
 
         # Evaluation logging (only active in val mode with log_dir set)
         self.eval_log_dir = Path(eval_log_dir) if eval_log_dir else None
-        self._eval_episode_count = 0
-        self._eval_buffer = []  # Buffer step data during episode, save at end
+        self.eval_mode = self.eval_log_dir is not None
+        self.eval_episode_count = 0
+        self.eval_step_count = 0
 
         # Use default Panda controller (BASIC with OSC_POSE)
         # This gives delta control in base frame: [dx, dy, dz, dax, day, daz, gripper]
@@ -138,19 +133,22 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         # Always include birdview for reconstruction rendering
         # TODO: try to remove birdview camera in train mode as only extrinsic and intrinsic but not the simulation renderings are needed
-        if self.mode == "train":
-            camera_names = ["robot0_eye_in_hand", "birdview"]
-        elif self.mode == "val" or self.mode == "test":
-            camera_names = ["robot0_eye_in_hand", "birdview", "frontview", "sideview"]
+        if self.eval_mode:
+            self.camera_names = [
+                "robot0_eye_in_hand",
+                "birdview",
+                "frontview",
+                "sideview",
+            ]
         else:
-            raise ValueError(f"Unknown type: {self.mode}")
+            self.camera_names = ["robot0_eye_in_hand", "birdview"]
 
         self.robot_env = robosuite.make(
             env_name="Reconstruct3D",
             robots="Panda",
             controller_configs=controller_config,
             horizon=horizon,
-            camera_names=camera_names,
+            camera_names=self.camera_names,
             camera_heights=camera_height,
             camera_widths=camera_width,
         )
@@ -191,7 +189,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         quat = mat2quat(extrinsic[:3, :3])
         return np.concatenate([position, quat]).astype(np.float32)
 
-    def _get_obs(self) -> Dict[str, np.ndarray]:
+    def _get_obs(self, reconstruction) -> Dict[str, np.ndarray]:
         """Get current observation (camera pose + reconstruction render)."""
         # Get birdview camera matrices for rendering reconstruction
         intrinsic = get_camera_intrinsic_matrix(
@@ -203,9 +201,14 @@ class Reconstruct3DGymWrapper(gym.Env):
         extrinsic = get_camera_extrinsic_matrix(self.robot_env.sim, "birdview")
 
         # Render current reconstruction from birdview (grayscale for feature extraction)
-        vertices, faces = self._current_reconstruction
+        vertices, faces = reconstruction
         render = render_mesh(
-            vertices, faces, extrinsic, intrinsic, self.render_resolution, grayscale=True
+            vertices,
+            faces,
+            extrinsic,
+            intrinsic,
+            self.render_resolution,
+            grayscale=True,
         )
 
         return {
@@ -255,48 +258,23 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
         reconstruction = self.reconstruction_policy.reconstruct()
-        self._current_reconstruction = reconstruction  # Store for obs
         reward = float(self.robot_env.reward(reconstruction=reconstruction))
         if self.collect_timing:
             self.timing_stats.reward_total += time.perf_counter() - t0
             self.timing_stats.n_steps += 1
 
-        # Buffer evaluation data (val mode with log_dir) - save at episode end
-        if self.eval_log_dir is not None:
-            # Get birdview camera for reconstruction rendering
-            birdview_intrinsic = get_camera_intrinsic_matrix(
-                self.robot_env.sim,
-                "birdview",
-                self.robot_env.camera_heights[0],
-                self.robot_env.camera_widths[0],
+        # Save eval data if in eval mode
+        if self.eval_mode:
+            self._save_eval_data(
+                reward=reward,
+                obs_dict=obs_dict,
+                reconstruction=reconstruction,
             )
-            birdview_extrinsic = get_camera_extrinsic_matrix(
-                self.robot_env.sim, "birdview"
-            )
-            self._eval_buffer.append(
-                {
-                    "step": self._step_count,
-                    "rgb": rgb_image.copy() if rgb_image is not None else None,
-                    "depth": depth_image.copy() if depth_image is not None else None,
-                    "vertices": reconstruction[0].copy(),
-                    "faces": reconstruction[1].copy(),
-                    "birdview_intrinsic": birdview_intrinsic.copy(),
-                    "birdview_extrinsic": birdview_extrinsic.copy(),
-                    "reward": reward,
-                }
-            )
+            self.eval_step_count += 1
 
-        # Episode termination
-        terminated = done
-        truncated = self._step_count >= self.robot_env.horizon
+        obs = self._get_obs(reconstruction=reconstruction)
 
-        # Save buffered eval data at end of episode
-        if self.eval_log_dir is not None and (terminated or truncated):
-            self._save_episode_data()
-
-        obs = self._get_obs()
-
-        return obs, reward, terminated, truncated, info
+        return obs, reward, done, self._step_count >= self.robot_env.horizon, info
 
     def reset(
         self, seed: Optional[int] = None, options: Optional[dict] = None
@@ -305,10 +283,6 @@ class Reconstruct3DGymWrapper(gym.Env):
         super().reset(seed=seed)
         if seed is not None:
             np.random.seed(seed)
-
-        # Clear eval buffer for new episode (counter incremented on save)
-        if self.eval_log_dir is not None:
-            self._eval_buffer.clear()
 
         # Reset robot environment (MuJoCo state)
         t0 = time.perf_counter()
@@ -319,10 +293,6 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Reset reconstruction policy (TSDF volume)
         t0 = time.perf_counter()
         self.reconstruction_policy.reset()
-        self._current_reconstruction = (
-            np.zeros((0, 3)),
-            np.zeros((0, 3), dtype=np.int64),
-        )
         if self.collect_timing:
             self.timing_stats.reset_reconstruction_total += time.perf_counter() - t0
 
@@ -343,7 +313,18 @@ class Reconstruct3DGymWrapper(gym.Env):
         if self.collect_timing:
             self.timing_stats.n_resets += 1
 
-        return self._get_obs(), {}
+        self.eval_episode_count += 1
+        self.eval_step_count = 0
+
+        return (
+            self._get_obs(
+                reconstruction=(
+                    np.zeros((0, 3), dtype=np.float32),
+                    np.zeros((0, 3), dtype=np.int32),
+                )
+            ),
+            {},
+        )
 
     def get_timing_stats(self) -> Optional[TimingStats]:
         """Get accumulated timing statistics (only if collect_timing=True)."""
@@ -353,54 +334,59 @@ class Reconstruct3DGymWrapper(gym.Env):
         """Render current camera view."""
         return self.robot_env.render()
 
-    def _save_episode_data(self):
+    def _save_eval_data(self, reward, obs_dict, reconstruction):
         """Save buffered evaluation data at end of episode."""
-        if not self._eval_buffer:
-            return
-
-        self._eval_episode_count += 1
-        episode_dir = self.eval_log_dir / f"episode_{self._eval_episode_count:04d}"
+        episode_dir = self.eval_log_dir / f"episode_{self.eval_episode_count:04d}"
         episode_dir.mkdir(parents=True, exist_ok=True)
 
         # Save rewards CSV
-        with open(episode_dir / "rewards.csv", "w") as f:
-            f.write("step,reward\n")
-            for data in self._eval_buffer:
-                f.write(f"{data['step']},{data['reward']:.6f}\n")
+        with open(episode_dir / "rewards.csv", "a") as f:
+            f.write(f"Step: {self.eval_step_count}, Reward: {reward:.6f}\n")
 
         # Save images and mesh renders
-        for data in self._eval_buffer:
-            step = data["step"]
+        for camera_name, obs in obs_dict.items():
 
             # RGB image (flip vertically - robosuite uses bottom-left origin)
-            if data["rgb"] is not None:
+            if "image" in camera_name:
                 plt.imsave(
-                    episode_dir / f"step_{step:03d}_rgb.png", np.flipud(data["rgb"])
+                    episode_dir
+                    / f"step_{self.eval_step_count:03d}_{camera_name}_rgb.png",
+                    np.flipud(obs),
                 )
 
             # Depth image
-            if data["depth"] is not None:
-                depth_2d = np.squeeze(data["depth"])
+            if "depth" in camera_name:
+                depth_2d = np.squeeze(obs)
                 plt.imsave(
-                    episode_dir / f"step_{step:03d}_depth.png",
+                    episode_dir / f"step_{self.eval_step_count:03d}_depth.png",
                     np.flipud(depth_2d),
                     cmap="viridis",
                 )
 
-            # Reconstruction mesh render (RGB for visualization)
-            if len(data["vertices"]) > 0:
-                recon_rgb = render_mesh(
-                    data["vertices"],
-                    data["faces"],
-                    data["birdview_extrinsic"],
-                    data["birdview_intrinsic"],
-                    resolution=(128, 128),
-                    grayscale=False,
-                )
-                plt.imsave(
-                    episode_dir / f"step_{step:03d}_reconstruction.png",
-                    recon_rgb,
-                )
+        for camera_name in self.camera_names:
+            # Camera extrinsics
+            extrinsic = get_camera_extrinsic_matrix(self.robot_env.sim, camera_name)
+            intrinsic = get_camera_intrinsic_matrix(
+                self.robot_env.sim,
+                camera_name,
+                self.robot_env.camera_heights[0],
+                self.robot_env.camera_widths[0],
+            )
+
+            rendered_rgb = render_mesh(
+                reconstruction[0],
+                reconstruction[1],
+                extrinsic,
+                intrinsic,
+                resolution=self.render_resolution,
+                grayscale=False,
+            )
+
+            plt.imsave(
+                episode_dir
+                / f"step_{self.eval_step_count:03d}_{camera_name}_reconstruction.png",
+                rendered_rgb,
+            )
 
     def close(self):
         """Clean up resources."""
