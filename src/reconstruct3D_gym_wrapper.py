@@ -345,21 +345,21 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         # Save images and mesh renders
         for camera_name, obs in obs_dict.items():
-
-            # RGB image (flip vertically - robosuite uses bottom-left origin)
+            # RGB image
             if "image" in camera_name:
                 plt.imsave(
                     episode_dir
                     / f"step_{self.eval_step_count:03d}_{camera_name}_rgb.png",
-                    np.flipud(obs),
+                    obs,
                 )
 
             # Depth image
             if "depth" in camera_name:
                 depth_2d = np.squeeze(obs)
                 plt.imsave(
-                    episode_dir / f"step_{self.eval_step_count:03d}_depth.png",
-                    np.flipud(depth_2d),
+                    episode_dir
+                    / f"step_{self.eval_step_count:03d}_{camera_name}_depth.png",
+                    depth_2d,
                     cmap="viridis",
                 )
 
