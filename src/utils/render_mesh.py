@@ -1,9 +1,36 @@
-"""Mesh rendering using Open3D's offscreen renderer (no OpenGL/EGL conflicts)."""
+"""Mesh rendering using Open3D's offscreen renderer."""
 
+import contextlib
+import os
+import sys
 from typing import Tuple
 
 import numpy as np
 import open3d as o3d
+
+
+@contextlib.contextmanager
+def _suppress_stdout_stderr():
+    """Temporarily suppress stdout and stderr at the C level (for Filament engine spam)."""
+    # Save original file descriptors
+    stdout_fd = sys.stdout.fileno()
+    stderr_fd = sys.stderr.fileno()
+    old_stdout = os.dup(stdout_fd)
+    old_stderr = os.dup(stderr_fd)
+
+    # Redirect to /dev/null
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, stdout_fd)
+    os.dup2(devnull, stderr_fd)
+    try:
+        yield
+    finally:
+        # Restore original file descriptors
+        os.dup2(old_stdout, stdout_fd)
+        os.dup2(old_stderr, stderr_fd)
+        os.close(old_stdout)
+        os.close(old_stderr)
+        os.close(devnull)
 
 
 def render_mesh(
@@ -45,30 +72,31 @@ def render_mesh(
     # Paint mesh light gray for visibility
     mesh.paint_uniform_color([0.7, 0.7, 0.7])
 
-    # Create offscreen renderer
-    renderer = o3d.visualization.rendering.OffscreenRenderer(W, H)
-    renderer.scene.set_background([0.0, 0.0, 0.0, 1.0])  # Black background
+    # Suppress stdout/stderr for entire rendering block (Filament engine spam)
+    with _suppress_stdout_stderr():
+        renderer = o3d.visualization.rendering.OffscreenRenderer(W, H)
+        renderer.scene.set_background([0.0, 0.0, 0.0, 1.0])  # Black background
 
-    # Add mesh to scene
-    material = o3d.visualization.rendering.MaterialRecord()
-    material.shader = "defaultLit"
-    renderer.scene.add_geometry("mesh", mesh, material)
+        # Add mesh to scene
+        material = o3d.visualization.rendering.MaterialRecord()
+        material.shader = "defaultLit"
+        renderer.scene.add_geometry("mesh", mesh, material)
 
-    # Setup camera intrinsics
-    fx, fy = intrinsic[0, 0], intrinsic[1, 1]
-    cx, cy = intrinsic[0, 2], intrinsic[1, 2]
-    intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(W, H, fx, fy, cx, cy)
+        # Setup camera intrinsics
+        fx, fy = intrinsic[0, 0], intrinsic[1, 1]
+        cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+        intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(W, H, fx, fy, cx, cy)
 
-    # Setup camera extrinsics (Open3D uses camera-to-world, so invert)
-    extrinsic_o3d = np.linalg.inv(extrinsic)
-    renderer.setup_camera(intrinsic_o3d, extrinsic_o3d)
+        # Setup camera extrinsics (Open3D uses camera-to-world, so invert)
+        extrinsic_o3d = np.linalg.inv(extrinsic)
+        renderer.setup_camera(intrinsic_o3d, extrinsic_o3d)
 
-    # Add lighting
-    renderer.scene.scene.set_sun_light([0.0, 0.0, -1.0], [1.0, 1.0, 1.0], 75000)
-    renderer.scene.scene.enable_sun_light(True)
+        # Add lighting
+        renderer.scene.scene.set_sun_light([0.0, 0.0, -1.0], [1.0, 1.0, 1.0], 75000)
+        renderer.scene.scene.enable_sun_light(True)
 
-    # Render
-    img = np.asarray(renderer.render_to_image())
+        # Render and copy result before destroying renderer
+        img = np.asarray(renderer.render_to_image()).copy()
 
     # Convert to float [0, 1]
     result = img.astype(np.float32) / 255.0
