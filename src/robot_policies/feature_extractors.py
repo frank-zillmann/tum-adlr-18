@@ -71,7 +71,17 @@ class CameraPoseMeshRenderingExtractor(BaseFeaturesExtractor):
         )
 
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:
-        render_features = self.cnn(observations["reconstruction_render"])
+        render = observations["reconstruction_render"]
+        # Downsample to 64x64 if needed
+        if render.shape[-2:] != (64, 64):
+            render = nn.functional.interpolate(
+                render, size=(64, 64), mode="bilinear", align_corners=False
+            )
+            print(
+                f"Interpolated render from {observations['reconstruction_render'].shape[-2:]} to (64, 64)"
+            )
+        render_features = self.cnn(render)
+
         pose_features = self.pose_net(observations["camera_pose"])
         combined = torch.cat([render_features, pose_features], dim=1)
         return self.combine(combined)
