@@ -22,7 +22,7 @@ class TrainConfig:
     n_steps: int = 256  # Steps per env before update
     batch_size: int = 64  # Minibatch size for gradient updates
     n_epochs: int = 10  # Passes over rollout buffer per update
-    gamma: float = 0.95  # Discount factor
+    gamma: float = 0.98  # Discount factor
     gae_lambda: float = 0.95  # GAE lambda for advantage estimation
     clip_range: float = 0.2  # PPO clipping parameter
     ent_coef: float = 0.01  # Entropy bonus for exploration
