@@ -180,6 +180,7 @@ def train(config: TrainConfig, checkpoint: str = None):
         total_timesteps=config.total_timesteps,
         callback=callbacks,
         progress_bar=True,
+        reset_num_timesteps=not checkpoint,
     )
     print(f"Training complete.")
     model.save(str(log_dir / "final_model"))
