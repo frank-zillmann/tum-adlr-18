@@ -10,7 +10,7 @@ def evaluate(checkpoint: str, n_episodes: int = 10):
     """Evaluate trained model."""
     print(f"Loading: {checkpoint}")
     model = PPO.load(checkpoint)
-    env = Reconstruct3DGymWrapper(mode="test", horizon=10)
+    env = Reconstruct3DGymWrapper()
 
     rewards = []
     for ep in range(n_episodes):

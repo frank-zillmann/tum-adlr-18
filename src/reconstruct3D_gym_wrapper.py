@@ -105,7 +105,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             voxel_size=0.01,
             sdf_trunc=0.5,
         ),
-        horizon=20,
+        horizon=40,
         camera_height=128,
         camera_width=128,
         render_height=64,
@@ -131,6 +131,28 @@ class Reconstruct3DGymWrapper(gym.Env):
             controller=None,  # Load default for robot
             robot="Panda",
         )
+
+        # Increase action limits for camera exploration task
+        # Default: position ±0.05m, orientation ±0.5rad
+        # New: position ±0.15m (15cm), orientation ±0.8rad (~46°)
+        controller_config["body_parts"]["right"]["output_max"] = [
+            0.15,
+            0.15,
+            0.15,
+            0.8,
+            0.8,
+            0.8,
+        ]
+        controller_config["body_parts"]["right"]["output_min"] = [
+            -0.15,
+            -0.15,
+            -0.15,
+            -0.8,
+            -0.8,
+            -0.8,
+        ]
+
+        print(f"Using controller config: {controller_config}")
 
         # Always include birdview for reconstruction rendering
         # TODO: try to remove birdview camera in train mode as only extrinsic and intrinsic but not the simulation renderings are needed

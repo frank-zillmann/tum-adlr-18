@@ -11,7 +11,7 @@ class TrainConfig:
     """Training configuration with sensible defaults."""
 
     # Environment
-    horizon: int = 20
+    horizon: int = 40
     camera_height: int = 128
     camera_width: int = 128
 
