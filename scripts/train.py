@@ -182,10 +182,12 @@ def train(config: TrainConfig, checkpoint: str = None):
         callback=callbacks,
         progress_bar=True,
     )
+    print(f"Training complete.")
     model.save(str(log_dir / "final_model"))
 
     train_env.close()
     eval_env.close()
+    print(f"Environments closed.")
 
 
 if __name__ == "__main__":

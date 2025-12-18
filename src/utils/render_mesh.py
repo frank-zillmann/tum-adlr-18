@@ -3,7 +3,7 @@
 import contextlib
 import os
 import sys
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 import open3d as o3d
@@ -34,6 +34,23 @@ def _suppress_stdout_stderr():
 
 
 o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
+
+# Global renderer cache to avoid memory leak from repeated creation/destruction
+# Key: (width, height), Value: OffscreenRenderer
+_renderer_cache: dict = {}
+
+
+def _get_or_create_renderer(
+    width: int, height: int
+) -> o3d.visualization.rendering.OffscreenRenderer:
+    """Get cached renderer or create new one for given resolution."""
+    key = (width, height)
+    if key not in _renderer_cache:
+        with _suppress_stdout_stderr():
+            _renderer_cache[key] = o3d.visualization.rendering.OffscreenRenderer(
+                width, height
+            )
+    return _renderer_cache[key]
 
 
 def render_mesh(
@@ -79,46 +96,48 @@ def render_mesh(
     # Paint mesh light gray for visibility
     mesh.paint_uniform_color([0.7, 0.7, 0.7])
 
-    # Suppress stdout/stderr for entire rendering block (Filament engine spam)
-    with _suppress_stdout_stderr():
-        renderer = o3d.visualization.rendering.OffscreenRenderer(W, H)
-        renderer.scene.set_background([0.0, 0.0, 0.0, 1.0])  # Black background
+    # Get or create cached renderer (avoids memory leak from repeated creation)
+    renderer = _get_or_create_renderer(W, H)
 
-        # Add mesh to scene with appropriate shader
-        material = o3d.visualization.rendering.MaterialRecord()
-        if lighting == "unlit":
-            # Flat shading, no lighting (most consistent for neural network input)
-            material.shader = "defaultUnlit"
-        elif lighting == "ambient":
-            # Soft ambient lighting only
-            material.shader = "defaultLit"
-        else:
-            raise ValueError(
-                f"Unknown lighting mode: {lighting}. Use 'unlit' or 'ambient'."
-            )
-        renderer.scene.add_geometry("mesh", mesh, material)
+    # Clear previous scene content
+    renderer.scene.clear_geometry()
+    renderer.scene.set_background([0.0, 0.0, 0.0, 1.0])  # Black background
 
-        # Configure lighting
-        if lighting == "ambient":
-            # Disable sun light and use soft ambient lighting profile
-            renderer.scene.scene.enable_sun_light(False)
-            renderer.scene.set_lighting(
-                renderer.scene.LightingProfile.SOFT_SHADOWS, (0, 0, 0)
-            )
+    # Add mesh to scene with appropriate shader
+    material = o3d.visualization.rendering.MaterialRecord()
+    if lighting == "unlit":
+        # Flat shading, no lighting (most consistent for neural network input)
+        material.shader = "defaultUnlit"
+    elif lighting == "ambient":
+        # Soft ambient lighting only
+        material.shader = "defaultLit"
+    else:
+        raise ValueError(
+            f"Unknown lighting mode: {lighting}. Use 'unlit' or 'ambient'."
+        )
+    renderer.scene.add_geometry("mesh", mesh, material)
 
-        # Setup camera intrinsics (must match render resolution)
-        fx, fy = intrinsic[0, 0], intrinsic[1, 1]
-        cx, cy = intrinsic[0, 2], intrinsic[1, 2]
-        intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(W, H, fx, fy, cx, cy)
+    # Configure lighting
+    if lighting == "ambient":
+        # Disable sun light and use soft ambient lighting profile
+        renderer.scene.scene.enable_sun_light(False)
+        renderer.scene.set_lighting(
+            renderer.scene.LightingProfile.SOFT_SHADOWS, (0, 0, 0)
+        )
 
-        # Setup camera extrinsics
-        # Robosuite's get_camera_extrinsic_matrix returns camera-to-world (camera pose in world)
-        # Open3D's setup_camera expects world-to-camera (view matrix), so we invert
-        extrinsic_w2c = np.linalg.inv(extrinsic)
-        renderer.setup_camera(intrinsic_o3d, extrinsic_w2c)
+    # Setup camera intrinsics (must match render resolution)
+    fx, fy = intrinsic[0, 0], intrinsic[1, 1]
+    cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+    intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(W, H, fx, fy, cx, cy)
 
-        # Render and copy result before destroying renderer
-        img = np.asarray(renderer.render_to_image()).copy()
+    # Setup camera extrinsics
+    # Robosuite's get_camera_extrinsic_matrix returns camera-to-world (camera pose in world)
+    # Open3D's setup_camera expects world-to-camera (view matrix), so we invert
+    extrinsic_w2c = np.linalg.inv(extrinsic)
+    renderer.setup_camera(intrinsic_o3d, extrinsic_w2c)
+
+    # Render and copy result
+    img = np.asarray(renderer.render_to_image()).copy()
 
     # Convert to float [0, 1]
     result = img.astype(np.float32) / 255.0
