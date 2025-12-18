@@ -178,7 +178,9 @@ def train(config: TrainConfig, checkpoint: str = None):
     # Train
     print(f"Training for {config.total_timesteps} steps. Logs: {log_dir}")
     model.learn(
-        total_timesteps=config.total_timesteps, callback=callbacks, progress_bar=True
+        total_timesteps=config.total_timesteps,
+        callback=callbacks,
+        progress_bar=True,
     )
     model.save(str(log_dir / "final_model"))
 

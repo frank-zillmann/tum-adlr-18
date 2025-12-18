@@ -33,6 +33,9 @@ def _suppress_stdout_stderr():
         os.close(devnull)
 
 
+o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
+
+
 def render_mesh(
     vertices: np.ndarray,
     faces: np.ndarray,
