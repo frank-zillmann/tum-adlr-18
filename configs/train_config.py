@@ -14,6 +14,8 @@ class TrainConfig:
     horizon: int = 40
     camera_height: int = 128
     camera_width: int = 128
+    render_height: int = 64
+    render_width: int = 64
 
     # PPO hyperparameters
     lr: float = 3e-4

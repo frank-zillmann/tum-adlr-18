@@ -24,15 +24,18 @@ from configs.train_config import TrainConfig
 
 
 def make_env(
-    mode: str,
+    config: TrainConfig,
     seed: int,
-    horizon: int,
     collect_timing: bool = False,
     eval_log_dir=None,
 ):
     def _init():
         env = Reconstruct3DGymWrapper(
-            horizon=horizon,
+            horizon=config.horizon,
+            camera_height=config.camera_height,
+            camera_width=config.camera_width,
+            render_height=config.render_height,
+            render_width=config.render_width,
             collect_timing=collect_timing,
             eval_log_dir=eval_log_dir,
         )
@@ -98,9 +101,7 @@ def train(config: TrainConfig, checkpoint: str = None):
     # Create environments (with timing collection if benchmark enabled)
     # Note: timing only works with DummyVecEnv (n_envs=1), not SubprocVecEnv
     collect_timing = config.benchmark and config.n_envs == 1
-    env_fn = lambda i: make_env(
-        "train", i, config.horizon, collect_timing=collect_timing
-    )
+    env_fn = lambda i: make_env(config, seed=i, collect_timing=collect_timing)
     train_env = (
         SubprocVecEnv([env_fn(i) for i in range(config.n_envs)])
         if config.n_envs > 1
@@ -108,9 +109,7 @@ def train(config: TrainConfig, checkpoint: str = None):
     )
     # Eval env logs images and rewards to log_dir/eval_data/
     eval_log_dir = log_dir / "eval_data"
-    eval_env = DummyVecEnv(
-        [make_env("val", 42, config.horizon, eval_log_dir=eval_log_dir)]
-    )
+    eval_env = DummyVecEnv([make_env(config, seed=42, eval_log_dir=eval_log_dir)])
 
     # Policy kwargs
     policy_kwargs = {
