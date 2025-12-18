@@ -18,10 +18,10 @@ class TrainConfig:
     render_width: int = 64
 
     # PPO hyperparameters
-    lr: float = 3e-4
-    n_steps: int = 256  # Steps per env before update
-    batch_size: int = 64  # Minibatch size for gradient updates
-    n_epochs: int = 10  # Passes over rollout buffer per update
+    lr: float = 2e-4
+    n_steps: int = 1024  # Steps per env before update
+    batch_size: int = 256  # Minibatch size for gradient updates
+    n_epochs: int = 5  # Passes over rollout buffer per update
     gamma: float = 0.98  # Discount factor
     gae_lambda: float = 0.95  # GAE lambda for advantage estimation
     clip_range: float = 0.2  # PPO clipping parameter
