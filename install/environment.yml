@@ -4,4 +4,45 @@ channels:
   - defaults
 dependencies:
   - python=3.10
+  
+  # Deep learning
+  # Note: PyTorch is installed separately by setup.sh based on CUDA availability
+  - conda-forge::tensorboard
+  
+  # Core scientific computing
+  - numpy
+  - scipy
+  - matplotlib
+  
+  # Computer vision
+  - conda-forge::opencv
+  
+  # Robotics and simulation
+  - conda-forge::mujoco
+  
+  # Reinforcement learning
+  - conda-forge::gymnasium
+  
+  # Utilities
+  - pyyaml
+  - conda-forge::tqdm
+  
+  # Development and testing
+  - pytest
+  - pytest-cov
+  
+  # pip-only packages
   - pip
+  - pip:
+      # 3D reconstruction (no conda package)
+      - open3d
+      - mesh2sdf
+      
+      # Reinforcement learning (specific versions needed)
+      - stable-baselines3
+      
+      # Robosuite (editable mode for src/ imports)
+      - -e external/robosuite
+      
+      # Project itself (editable mode for src/ imports)
+      - -e .
