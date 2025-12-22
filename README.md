@@ -15,17 +15,40 @@ source ./install/setup.sh
 ```
 
 ### Known fixes:
-If you encounter errors with EGL (NVIDIA’s GPU offscreen rendering backend), install the following packages:
+I used a CPU-only laptop and a Google Cloud VM with NVIDIA T4 GPU and `pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570` image. The following fixes were necessary on the VM.
+
+**OpenCV/libGL error** (`libGL.so.1: cannot open shared object file`):
 ```bash
-sudo apt update
+sudo apt install -y libgl1
+```
+
+**EGL error** (NVIDIA GPU offscreen rendering backend):
+```bash
+# Mesa EGL libraries (base requirement)
 sudo apt install -y libegl1-mesa-dev libgles2-mesa-dev
+
+# NVIDIA EGL (required for headless GPU rendering with NVIDIA drivers)
+# Replace 570 with your driver version (check with: nvidia-smi)
+sudo apt install -y libnvidia-gl-570-server
+```
+
+**MuJoCo rendering backend** (set EGL for headless/offscreen rendering):
+```bash
+export MUJOCO_GL=egl
+# Add to ~/.bashrc for persistence:
+echo 'export MUJOCO_GL=egl' >> ~/.bashrc
+```
+
+**GPU render device permission denied** (`failed to open /dev/dri/renderD128: Permission denied`):
+```bash
+sudo usermod -aG render $USER
+sudo usermod -aG video $USER
+# Log out and back in, or use newgrp to apply immediately:
+newgrp render
+newgrp video
 ```
 
 ## Usage
 
 ### Testing
 
-Test the environment setup:
-```bash
-python tests/test_reconstruct3D_env.py
-```
