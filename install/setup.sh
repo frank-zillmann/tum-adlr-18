@@ -17,8 +17,9 @@ conda activate $ENV_NAME
 echo ""
 # Detect CUDA
 if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
-    echo "CUDA detected - installing PyTorch with CUDA 12.8 support"
-    PYTORCH_PACKAGES="pytorch torchvision pytorch-cuda=12.8 -c pytorch -c nvidia"
+    #TODO: Check if it is okay to use CUDA 12.4 here also the image is pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570
+    echo "CUDA detected - installing PyTorch with CUDA 12.4 support"
+    PYTORCH_PACKAGES="pytorch torchvision pytorch-cuda=12.4 -c pytorch -c nvidia"
 else
     echo "No CUDA detected - installing CPU-only PyTorch"
     PYTORCH_PACKAGES="pytorch torchvision cpuonly -c pytorch"
@@ -31,7 +32,7 @@ conda install $PYTORCH_PACKAGES -y
 # Install remaining packages from yml
 echo ""
 echo "Step 3/4: Installing remaining packages from environment.yml..."
-conda env update --name $ENV_NAME --file install/environment.yml --prune
+conda env update --name $ENV_NAME --file install/environment.yml --verbose
 
 # Install repository in editable mode
 echo ""
