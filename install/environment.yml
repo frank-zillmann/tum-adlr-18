@@ -1,31 +1,34 @@
 name: adlr
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - python=3.10
   
   # Deep learning
   # Note: PyTorch is installed separately by setup.sh based on CUDA availability
-  - conda-forge::tensorboard
+  - tensorboard
   
   # Core scientific computing
   - numpy
   - scipy
   - matplotlib
   
-  # Computer vision
-  - conda-forge::opencv
+  # Computer vision and 3D
+  - opencv
   
   # Robotics and simulation
-  - conda-forge::mujoco
+  - mujoco
   
   # Reinforcement learning
-  - conda-forge::gymnasium
+  - gymnasium
+  - stable-baselines3
   
   # Utilities
   - pyyaml
-  - conda-forge::tqdm
+  - tqdm
+  - h5py
+  - imageio
+  - pillow
   
   # Development and testing
   - pytest
@@ -34,15 +37,8 @@ dependencies:
   # pip-only packages
   - pip
   - pip:
-      # 3D reconstruction (no conda package)
+      # 3D / rendering (pip wheels avoid current conda solver conflict)
       - open3d
+
+      # 3D reconstruction (not available on conda)
       - mesh2sdf
-      
-      # Reinforcement learning (specific versions needed)
-      - stable-baselines3
-      
-      # Robosuite (editable mode for src/ imports)
-      - -e external/robosuite
-      
-      # Project itself (editable mode for src/ imports)
-      - -e .
