@@ -29,6 +29,7 @@ dependencies:
   - h5py
   - imageio
   - pillow
+  - sympy=1.13.1  # Required by PyTorch
   
   # Development and testing
   - pytest
