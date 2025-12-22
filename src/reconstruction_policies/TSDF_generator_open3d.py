@@ -116,13 +116,15 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
         )
 
         # Create intrinsic tensor (3x3)
+        # Note: Open3D's compute_unique_block_coordinates expects intrinsic/extrinsic on CPU
         intrinsic_t = o3d.core.Tensor(
-            camera_intrinsic.astype(np.float64), device=self.device
+            camera_intrinsic.astype(np.float64), device=o3d.core.Device("CPU:0")
         )
 
         # Create extrinsic tensor (4x4) - world to camera
+        # Note: Open3D's compute_unique_block_coordinates expects extrinsic on CPU
         extrinsic_t = o3d.core.Tensor(
-            np.linalg.inv(camera_extrinsic).astype(np.float64), device=self.device
+            np.linalg.inv(camera_extrinsic).astype(np.float64), device=o3d.core.Device("CPU:0")
         )
 
         # Compute truncation in voxels (trunc_voxel_multiplier)
