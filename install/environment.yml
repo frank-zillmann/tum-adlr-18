@@ -44,3 +44,5 @@ dependencies:
 
       # 3D reconstruction (not available on conda)
       - mesh2sdf
+      # nvblox (NVIDIA 3D reconstruction, direct wheel install)
+      - https://github.com/nvidia-isaac/nvblox/releases/download/v0.0.8/nvblox_torch-0.0.8rc5+cu12ubuntu24-863-py3-none-linux_x86_64.whl
