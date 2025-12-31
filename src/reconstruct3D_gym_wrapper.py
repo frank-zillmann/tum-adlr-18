@@ -19,7 +19,6 @@ from robosuite.utils.camera_utils import (
 )
 
 from src.reconstruction_policies.base import BaseReconstructionPolicy
-from src.reconstruction_policies.TSDF_generator_open3d import TSDF_generator_open3d
 from src.utils.render_mesh import render_mesh
 
 
@@ -99,12 +98,7 @@ class Reconstruct3DGymWrapper(gym.Env):
 
     def __init__(
         self,
-        reconstruction_policy: BaseReconstructionPolicy = TSDF_generator_open3d(
-            bbox_min=np.array([-0.5, -0.5, 0.5]),
-            bbox_max=np.array([0.5, 0.5, 1.5]),
-            voxel_size=0.01,
-            sdf_trunc=0.5,
-        ),
+        reconstruction_policy: BaseReconstructionPolicy,
         horizon=40,
         camera_height=128,
         camera_width=128,

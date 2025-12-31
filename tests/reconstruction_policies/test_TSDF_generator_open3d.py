@@ -19,7 +19,7 @@ from robosuite.utils.camera_utils import (
     get_real_depth_map,
 )
 
-from src.reconstruction_policies.TSDF_generator_open3d import TSDF_generator_open3d
+from reconstruction_policies.open3d_TSDF_generator import Open3DTSDFGenerator
 from src.utils.plot_SDF_slices import plot_sdf_slices
 
 
@@ -133,7 +133,7 @@ def test_tsdf_single_observation(save_dir: str = "./data/test_TSDF_generator_ope
 
         # Create TSDF generator
         print("\nInitializing TSDF generator...")
-        tsdf = TSDF_generator_open3d(
+        tsdf = Open3DTSDFGenerator(
             bbox_min=bbox_min,
             bbox_max=bbox_max,
             voxel_size=0.02,  # 2cm voxels

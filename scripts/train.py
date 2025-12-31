@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
+import numpy as np
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import (
@@ -29,8 +30,32 @@ def make_env(
     collect_timing: bool = False,
     eval_log_dir=None,
 ):
+
     def _init():
+        # Select reconstruction policy
+        if config.reconstruction_policy == "open3d":
+            from src.reconstruction_policies.open3d_TSDF_generator import (
+                Open3DTSDFGenerator,
+            )
+
+            reconstruction_policy = Open3DTSDFGenerator(
+                bbox_min=np.array([-0.5, -0.5, 0.5]),
+                bbox_max=np.array([0.5, 0.5, 1.5]),
+                voxel_size=0.01,
+                sdf_trunc=0.5,
+            )
+        elif config.reconstruction_policy == "nvblox":
+            from src.reconstruction_policies.nvblox_reconstruction_policy import (
+                NvbloxReconstructionPolicy,
+            )
+
+            reconstruction_policy = NvbloxReconstructionPolicy()
+        else:
+            raise ValueError(
+                f"Unknown reconstruction policy: {config.reconstruction_policy}"
+            )
         env = Reconstruct3DGymWrapper(
+            reconstruction_policy=reconstruction_policy,
             horizon=config.horizon,
             camera_height=config.camera_height,
             camera_width=config.camera_width,

@@ -13,7 +13,7 @@ def get_default_device() -> str:
     return "CPU:0"
 
 
-class TSDF_generator_open3d(BaseReconstructionPolicy):
+class Open3DTSDFGenerator(BaseReconstructionPolicy):
     """
     Generate Truncated Signed Distance Fields from depth observations using Open3D.
 
@@ -124,7 +124,8 @@ class TSDF_generator_open3d(BaseReconstructionPolicy):
         # Create extrinsic tensor (4x4) - world to camera
         # Note: Open3D's compute_unique_block_coordinates expects extrinsic on CPU
         extrinsic_t = o3d.core.Tensor(
-            np.linalg.inv(camera_extrinsic).astype(np.float64), device=o3d.core.Device("CPU:0")
+            np.linalg.inv(camera_extrinsic).astype(np.float64),
+            device=o3d.core.Device("CPU:0"),
         )
 
         # Compute truncation in voxels (trunc_voxel_multiplier)
