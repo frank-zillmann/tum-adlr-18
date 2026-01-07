@@ -27,25 +27,30 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         **kwargs,
     ):
         # nvblox_torch expects:
-        # - depth_frame: torch.Tensor (H, W) in meters
-        # - t_w_c: torch.Tensor (4, 4) camera extrinsic (world to camera transform)
-        # - intrinsics: torch.Tensor (3, 3) camera intrinsic matrix
+        # - depth_frame: torch.Tensor (H, W) on GPU in meters
+        # - t_w_c: torch.Tensor (4, 4) on CPU - camera extrinsic (world to camera transform)
+        # - intrinsics: torch.Tensor (3, 3) on CPU - camera intrinsic matrix
         
         # Convert numpy arrays to torch tensors if needed
+        # Depth goes on GPU
         if isinstance(depth_image, np.ndarray):
             depth_tensor = torch.from_numpy(depth_image).float().cuda()
         else:
             depth_tensor = depth_image.float().cuda()
-            
+        
+        # Squeeze to 2D if depth has a channel dimension (e.g., H, W, 1) -> (H, W)
+        depth_tensor = depth_tensor.squeeze()
+        
+        # Intrinsics and extrinsics stay on CPU
         if isinstance(camera_intrinsic, np.ndarray):
-            intrinsic_tensor = torch.from_numpy(camera_intrinsic).float().cuda()
+            intrinsic_tensor = torch.from_numpy(camera_intrinsic).float()
         else:
-            intrinsic_tensor = camera_intrinsic.float().cuda()
+            intrinsic_tensor = camera_intrinsic.float().cpu()
             
         if isinstance(camera_extrinsic, np.ndarray):
-            extrinsic_tensor = torch.from_numpy(camera_extrinsic).float().cuda()
+            extrinsic_tensor = torch.from_numpy(camera_extrinsic).float()
         else:
-            extrinsic_tensor = camera_extrinsic.float().cuda()
+            extrinsic_tensor = camera_extrinsic.float().cpu()
         
         self.nvblox_mapper.add_depth_frame(
             depth_frame=depth_tensor,
@@ -53,10 +58,28 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             intrinsics=intrinsic_tensor,
         )
 
-    def reconstruct(self, type="tsdf", **kwargs):
+    def reconstruct(self, type="mesh", **kwargs):
+        """
+        Reconstruct the scene from integrated observations.
+        
+        Args:
+            type: "mesh" returns (vertices, faces) tuple as numpy arrays
+                  "tsdf" returns the raw TsdfLayer object
+        
+        Returns:
+            For "mesh": tuple of (vertices, faces) as numpy arrays
+            For "tsdf": TsdfLayer object
+        """
         if type == "mesh":
             self.nvblox_mapper.update_color_mesh()
-            return self.nvblox_mapper.get_color_mesh()
+            color_mesh = self.nvblox_mapper.get_color_mesh()
+            
+            # Extract vertices and faces as numpy arrays
+            # vertices() and triangles() are methods that return torch tensors
+            vertices = color_mesh.vertices().cpu().numpy()
+            faces = color_mesh.triangles().cpu().numpy()
+            
+            return (vertices, faces)
         elif type == "tsdf":
             return self.nvblox_mapper.tsdf_layer_view()
         else:
