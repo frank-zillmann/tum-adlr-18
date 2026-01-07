@@ -39,6 +39,14 @@ export MUJOCO_GL=egl
 echo 'export MUJOCO_GL=egl' >> ~/.bashrc
 ```
 
+**EGL device enumeration fails with Mesa** (`Cannot initialize a EGL device display`):
+If you have both NVIDIA and Mesa EGL drivers installed, the device enumeration may fail on Mesa devices. Force NVIDIA-only EGL:
+```bash
+export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+# Add to ~/.bashrc for persistence:
+echo 'export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json' >> ~/.bashrc
+```
+
 **GPU render device permission denied** (`failed to open /dev/dri/renderD128: Permission denied`):
 ```bash
 sudo usermod -aG render $USER
