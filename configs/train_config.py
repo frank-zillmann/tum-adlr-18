@@ -40,6 +40,10 @@ class TrainConfig:
     log_dir: str = "data/logs"
     # Reconstruction policy: 'open3d' (default) or 'nvblox'
     reconstruction_policy: str = "open3d"
+    # Reconstruction metric for reward computation:
+    # - 'chamfer_distance': compute Chamfer distance between reconstructed and ground truth meshes
+    # - 'elementwise_sdf_error': compute elementwise SDF error on a regular grid
+    reconstruction_metric: str = "chamfer_distance"
     checkpoint_freq: int = 10_000
     eval_freq: int = 10_000
     n_eval_episodes: int = 5

@@ -37,6 +37,7 @@ class TimingStats:
     reset_env_total: float = 0.0
     reset_reconstruction_total: float = 0.0
     reset_mesh_total: float = 0.0
+    reset_sdf_total: float = 0.0
 
     def summary(self) -> str:
         if self.n_steps == 0:
@@ -61,6 +62,7 @@ class TimingStats:
                 self.reset_env_total
                 + self.reset_reconstruction_total
                 + self.reset_mesh_total
+                + self.reset_sdf_total
             )
             avg_reset = reset_total / self.n_resets * 1000
             lines.extend(
@@ -70,6 +72,7 @@ class TimingStats:
                     f"    Env reset:      {self.reset_env_total/self.n_resets*1000:6.1f} ms ({100*self.reset_env_total/reset_total:5.1f}%)",
                     f"    Recon reset:    {self.reset_reconstruction_total/self.n_resets*1000:6.1f} ms ({100*self.reset_reconstruction_total/reset_total:5.1f}%)",
                     f"    GT mesh:        {self.reset_mesh_total/self.n_resets*1000:6.1f} ms ({100*self.reset_mesh_total/reset_total:5.1f}%)",
+                    f"    GT SDF:         {self.reset_sdf_total/self.n_resets*1000:6.1f} ms ({100*self.reset_sdf_total/reset_total:5.1f}%)",
                 ]
             )
 
@@ -106,6 +109,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         render_width=64,
         collect_timing=False,
         eval_log_dir: Optional[Path] = None,
+        reconstruction_metric: str = "chamfer_distance",
     ):
         self._step_count = 0
         self._episode_count = 0
@@ -114,6 +118,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         self.camera_resolution = (camera_height, camera_width)
         self.render_resolution = (render_height, render_width)
         self.timing_stats = TimingStats() if collect_timing else None
+        self.reconstruction_metric = reconstruction_metric
 
         # Evaluation logging (only active in val mode with log_dir set)
         self.eval_log_dir = Path(eval_log_dir) if eval_log_dir else None
@@ -282,29 +287,48 @@ class Reconstruct3DGymWrapper(gym.Env):
             rgb_image=rgb_image,
             depth_image=depth_image,
         )
-        reconstruction = self.reconstruction_policy.reconstruct()
+        
+        # Always get mesh reconstruction for observation/rendering
+        mesh_reconstruction = self.reconstruction_policy.reconstruct(type="mesh")
+        
+        # Get appropriate reconstruction for reward computation based on metric
+        if self.reconstruction_metric == "elementwise_sdf_error":
+            # For SDF-based metrics, get SDF grid for reward computation
+            reward_reconstruction = self.reconstruction_policy.reconstruct(
+                type="sdf",
+                sdf_size=self.robot_env.sdf_size,
+                sdf_bbox_center=self.robot_env.sdf_bbox_center,
+                sdf_bbox_size=self.robot_env.sdf_bbox_size,
+            )
+        else:
+            # For mesh-based metrics (e.g., chamfer_distance), use mesh
+            reward_reconstruction = mesh_reconstruction
+        
         if self.collect_timing:
             self.timing_stats.reconstruction_total += time.perf_counter() - t0
 
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
         reward, error = self.robot_env.reward(
-            reconstruction=reconstruction, output_error=True
+            reconstruction=reward_reconstruction,
+            reconstruction_metric=self.reconstruction_metric,
+            output_error=True,
         )
         if self.collect_timing:
             self.timing_stats.reward_total += time.perf_counter() - t0
             self.timing_stats.n_steps += 1
 
-        # Save eval data if in eval mode
+        # Save eval data if in eval mode (always use mesh for rendering)
         if self.eval_mode:
             self._save_eval_data(
                 reward=reward,
                 error=error,
                 obs_dict=obs_dict,
-                reconstruction=reconstruction,
+                reconstruction=mesh_reconstruction,
             )
 
-        obs = self._get_obs(reconstruction=reconstruction)
+        # Get observation using mesh reconstruction
+        obs = self._get_obs(reconstruction=mesh_reconstruction)
 
         return obs, reward, done, self._step_count >= self.robot_env.horizon, info
 
@@ -337,13 +361,12 @@ class Reconstruct3DGymWrapper(gym.Env):
         if self.collect_timing:
             self.timing_stats.reset_mesh_total += time.perf_counter() - t0
 
-        # SDF computation (currently skipped - mesh2sdf can be slow and not needed yet)
-        # t0 = time.perf_counter()
-        # self.robot_env.compute_static_env_sdf()
-        # if self.collect_timing:
-        #     self.timing_stats.reset_sdf_total += time.perf_counter() - t0
-
+        # Compute SDF ground truth if using SDF-based metric
+        t0 = time.perf_counter()
+        if self.reconstruction_metric == "elementwise_sdf_error":
+            self.robot_env.compute_static_env_sdf()
         if self.collect_timing:
+            self.timing_stats.reset_sdf_total += time.perf_counter() - t0
             self.timing_stats.n_resets += 1
 
         return (

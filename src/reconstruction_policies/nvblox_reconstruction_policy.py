@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from src.reconstruction_policies.base import BaseReconstructionPolicy
-from nvblox_torch.mapper import Mapper
+from nvblox_torch.mapper import Mapper, QueryType
 from nvblox_torch.mapper_params import MapperParams
 
 
@@ -58,17 +58,22 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             intrinsics=intrinsic_tensor,
         )
 
-    def reconstruct(self, type="mesh", **kwargs):
+    def reconstruct(self, type="mesh", sdf_size=32, sdf_bbox_center=None, sdf_bbox_size=None, **kwargs):
         """
         Reconstruct the scene from integrated observations.
         
         Args:
             type: "mesh" returns (vertices, faces) tuple as numpy arrays
                   "tsdf" returns the raw TsdfLayer object
+                  "sdf" returns a 3D numpy array of SDF values for reward computation
+            sdf_size: Resolution of the SDF grid for type="sdf" (default 32)
+            sdf_bbox_center: Center of the bounding box for SDF query (numpy array shape (3,))
+            sdf_bbox_size: Size of the bounding box for SDF query (scalar, length of longest side)
         
         Returns:
             For "mesh": tuple of (vertices, faces) as numpy arrays
             For "tsdf": TsdfLayer object
+            For "sdf": numpy array of shape (sdf_size, sdf_size, sdf_size)
         """
         if type == "mesh":
             self.nvblox_mapper.update_color_mesh()
@@ -82,8 +87,67 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             return (vertices, faces)
         elif type == "tsdf":
             return self.nvblox_mapper.tsdf_layer_view()
+        elif type == "sdf":
+            return self._query_sdf_grid(sdf_size, sdf_bbox_center, sdf_bbox_size)
         else:
             raise ValueError(f"Unknown reconstruction type: {type}")
+
+    def _query_sdf_grid(self, sdf_size, sdf_bbox_center, sdf_bbox_size):
+        """
+        Query the TSDF on a regular grid compatible with reconstruct3D reward function.
+        
+        The grid is constructed to match the same coordinate system used by mesh2sdf
+        in reconstruct3D.compute_static_env_sdf():
+        - The mesh is normalized to [-1, 1] centered at bbox_center with scale bbox_size/2
+        - The SDF grid samples this [-1, 1]^3 space uniformly
+        
+        Args:
+            sdf_size: Resolution of the grid (grid will be sdf_size^3)
+            sdf_bbox_center: Center of bounding box in world coordinates, shape (3,)
+            sdf_bbox_size: Size of bounding box (length of longest axis after padding)
+            
+        Returns:
+            numpy array of shape (sdf_size, sdf_size, sdf_size) with SDF values.
+            Unobserved regions are filled with a large positive value (100.0).
+        """
+        if sdf_bbox_center is None or sdf_bbox_size is None:
+            raise ValueError("sdf_bbox_center and sdf_bbox_size must be provided for type='sdf'")
+        
+        sdf_bbox_center = np.asarray(sdf_bbox_center)
+        
+        # Create grid in normalized [-1, 1] space (matching mesh2sdf convention)
+        # mesh2sdf uses uniform sampling in [-1, 1]^3
+        coords_1d = np.linspace(-1, 1, sdf_size)
+        
+        # Create 3D meshgrid
+        xx, yy, zz = np.meshgrid(coords_1d, coords_1d, coords_1d, indexing='ij')
+        
+        # Stack into query points (N, 3) in normalized space
+        query_points_normalized = np.stack([xx.ravel(), yy.ravel(), zz.ravel()], axis=1)
+        
+        # Transform from normalized [-1, 1] to world coordinates
+        # world = normalized * (bbox_size/2) + bbox_center
+        query_points_world = query_points_normalized * (sdf_bbox_size / 2) + sdf_bbox_center
+        
+        # Convert to torch tensor on GPU for nvblox query
+        query_points_tensor = torch.from_numpy(query_points_world).float().cuda()
+        
+        # Query TSDF layer
+        # Returns [N, 2] where column 0 is SDF value, column 1 is weight
+        tsdf_result = self.nvblox_mapper.query_layer(QueryType.TSDF, query_points_tensor)
+        
+        # Extract SDF values and weights
+        sdf_values = tsdf_result[:, 0].cpu().numpy()
+        weights = tsdf_result[:, 1].cpu().numpy()
+        
+        # Handle unobserved regions (weight == 0)
+        # nvblox returns SDF=100.0 for unobserved
+        # TODO: Fix this into two valid value only comparison
+        
+        # Reshape to 3D grid
+        sdf_grid = sdf_values.reshape(sdf_size, sdf_size, sdf_size)
+        
+        return sdf_grid
 
     def reset(self, **kwargs):
         # Create mapper params and set truncation distance
