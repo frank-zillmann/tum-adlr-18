@@ -149,10 +149,14 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         # Extract SDF values and weights
         sdf_values = tsdf_result[:, 0].cpu().numpy() # TODO: Optimize further to avoid CPU-GPU transfer and doing reward computation on GPU
         weights = tsdf_result[:, 1].cpu().numpy()
-        # print(f"Number of weight=0 voxels: {(weights == 0).sum()}")
-        # print(f"Number of truncated voxels: {(np.abs(sdf_values) >= self.sdf_trunc).sum()}")
-        # print(f"Number of sdf>99 voxels: {(sdf_values >= 99.0).sum()}")
+
+        print(f"TSDF stats: weight=0 voxels: {(weights == 0).sum()}, truncated voxels: {(np.abs(sdf_values) >= self.sdf_trunc).sum()}, sdf>99 voxels: {(sdf_values >= 99.0).sum()}")
+
+        # set unobserved and truncated sdf values to 100 manually # TODO: How does nvblox handle this?
+        sdf_values[(weights == 0) | (np.abs(sdf_values) >= self.sdf_trunc)] = 100.0
         
+        print(f"Manipulated TSDF stats: weight=0 voxels: {(weights == 0).sum()}, truncated voxels: {(np.abs(sdf_values) >= self.sdf_trunc).sum()}, sdf>99 voxels: {(sdf_values >= 99.0).sum()}")
+
         # Reshape to 3D grid
         sdf_grid = sdf_values.reshape(sdf_size, sdf_size, sdf_size)
         weights_grid = weights.reshape(sdf_size, sdf_size, sdf_size)
