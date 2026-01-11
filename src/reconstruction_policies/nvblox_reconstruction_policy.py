@@ -1,3 +1,9 @@
+import os
+# Suppress nvblox C++ logging (GLOG)
+# 0=INFO, 1=WARNING, 2=ERROR, 3=FATAL
+# Must be set before importing nvblox_torch or any library using glog
+os.environ["GLOG_minloglevel"] = "1"
+
 import numpy as np
 import torch
 from src.reconstruction_policies.base import BaseReconstructionPolicy
