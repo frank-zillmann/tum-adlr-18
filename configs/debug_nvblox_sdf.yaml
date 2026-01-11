@@ -9,4 +9,4 @@ n_eval_episodes: 1
 log_dir: data/debug-logs
 benchmark: true
 reconstruction_policy: nvblox
-reconstruction_metric: elementwise_sdf_error
+reconstruction_metric: voxelwise_tsdf_error

@@ -295,15 +295,15 @@ class Reconstruct3DGymWrapper(gym.Env):
         if self.reconstruction_metric == "voxelwise_tsdf_error":
             # For dense TSDF-based metrics, get SDF grid for reward computation
             reward_reconstruction = self.reconstruction_policy.reconstruct(
-                type="tsdf_dense",
+                type="tsdf",
                 sdf_size=self.robot_env.sdf_size,
                 sdf_bbox_center=self.robot_env.sdf_bbox_center,
                 sdf_bbox_size=self.robot_env.sdf_bbox_size,
             )
-            truncation_distance = self.reconstruction_policy.sdf_trunc
-
         elif self.reconstruction_metric == "chamfer_distance":
             reward_reconstruction = mesh_reconstruction
+        else:
+            raise ValueError(f"Unknown reconstruction metric: {self.reconstruction_metric}")
         
         if self.collect_timing:
             self.timing_stats.reconstruction_total += time.perf_counter() - t0
@@ -311,7 +311,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
         reward, error = self.robot_env.reward(
-            reconstruction=reconstruction, output_error=True
+            reconstruction=reward_reconstruction,
+            reconstruction_metric=self.reconstruction_metric, 
+            truncation_distance = getattr(self.reconstruction_policy, "sdf_trunc", None),  # only needed for voxelwise_tsdf_error
+            output_error=True
         )
         if self.collect_timing:
             self.timing_stats.reward_total += time.perf_counter() - t0
