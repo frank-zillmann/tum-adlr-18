@@ -84,13 +84,13 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             
             return (vertices, faces)
         elif type == "tsdf_dense":
-            return self._query_tsdf_grid(sdf_size, sdf_bbox_center, sdf_bbox_size)
+            return self._get_dense_tsdf(sdf_size, sdf_bbox_center, sdf_bbox_size)
         elif type == "tsdf_sparse":
             return self._get_sparse_tsdf()
         else:
             raise ValueError(f"Unknown reconstruction type: {type}")
 
-    def _query_sdf_grid(self, sdf_size: float, sdf_bbox_center: np.ndarray, sdf_bbox_size: float):
+    def _get_dense_tsdf(self, sdf_size: float, sdf_bbox_center: np.ndarray, sdf_bbox_size: float):
         """
         Query the TSDF on a regular grid.
         
@@ -146,64 +146,48 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         return sdf_grid, weights_grid
 
     def _get_sparse_tsdf(self):
-        """
-        Extract sparse TSDF data: only observed voxels with their world positions.
-        
-        This is more efficient than querying a dense grid when only a small fraction
-        of voxels are observed.
-        
-        Returns:
-            dict with:
-                'positions': numpy array (N, 3) - world coordinates of observed voxels
-                'sdf_values': numpy array (N,) - TSDF values at those positions
-                'truncation_distance': float - the truncation distance used by this TSDF
-        """
+        """Extract sparse TSDF: only observed voxels with grid indices (vectorized, no loop)."""
         layer = self.nvblox_mapper.tsdf_layer_view()
         voxel_size = layer.voxel_size()
-        block_dim = layer.block_dim_in_voxels # typically 8
+        block_dim = layer.block_dim_in_voxels
         
-        # get_all_blocks returns (block_data_list, block_indices_list)
-        # Each block_data is [8, 8, 8, 2] - a 3D grid of voxels, each with (distance, weight)
-        # The [8,8,8] shape is because each block contains 8×8×8 voxels arranged spatially
         blocks_data, block_indices = layer.get_all_blocks()
         
         if not blocks_data:
             return {
-                'positions': np.empty((0, 3), dtype=np.float32),
+                'grid_indices': np.empty((0, 3), dtype=np.int32),
                 'sdf_values': np.empty(0, dtype=np.float32),
                 'truncation_distance': self.sdf_trunc,
             }
         
-        device = blocks_data[0].device
-        all_positions = []
-        all_distances = []
+        # Stack all blocks for vectorized processing (no loop)
+        all_blocks = torch.stack(blocks_data)  # [num_blocks, 8, 8, 8, 2]
+        all_block_indices = torch.stack(block_indices).to(all_blocks.device)  # [num_blocks, 3]
         
-        for block_data, block_idx in zip(blocks_data, block_indices):
-            # block_data shape: [8, 8, 8, 2] where last dim is (distance, weight)
-            # A block is allocated when any voxel is observed, but individual voxels
-            # within the block may still be unobserved (weight=0), so we must filter
-            weights = block_data[:, :, :, 1]
-            observed_mask = weights > 0
-            
-            # Get voxel indices and compute world positions, shape (N_observed, 3)
-            voxel_indices = torch.stack(torch.where(observed_mask), dim=1).float()
-            # Ensure block_idx is on same device as voxel_indices
-            block_idx_gpu = block_idx.to(device).float()
-            world_positions = (block_idx_gpu * block_dim + voxel_indices + 0.5) * voxel_size
-            
-            all_positions.append(world_positions)
-            all_distances.append(block_data[:, :, :, 0][observed_mask])
+        # Find all observed voxels at once
+        weights = all_blocks[:, :, :, :, 1]
+        block_i, vx, vy, vz = torch.where(weights > 0)
         
-        if not all_positions:
+        if len(block_i) == 0:
             return {
-                'positions': np.empty((0, 3), dtype=np.float32),
+                'grid_indices': np.empty((0, 3), dtype=np.int32),
                 'sdf_values': np.empty(0, dtype=np.float32),
                 'truncation_distance': self.sdf_trunc,
             }
+        
+        # Compute global voxel indices: block_index * block_dim + voxel_offset
+        block_origins = all_block_indices[block_i] * block_dim  # [N, 3]
+        voxel_offsets = torch.stack([vx, vy, vz], dim=1)  # [N, 3]
+        grid_indices = block_origins + voxel_offsets  # [N, 3] global voxel indices
+        
+        # Extract SDF values and weights
+        sdf_values = all_blocks[block_i, vx, vy, vz, 0]
+        weights = all_blocks[block_i, vx, vy, vz, 1]
         
         return {
-            'positions': torch.cat(all_positions, dim=0).cpu().numpy(),
-            'sdf_values': torch.cat(all_distances, dim=0).cpu().numpy(),
+            'grid_indices': grid_indices.cpu().numpy().astype(np.int32),
+            'sdf_values': sdf_values.cpu().numpy(),
+            'weights': weights.cpu().numpy(),
             'truncation_distance': self.sdf_trunc,
         }
 
