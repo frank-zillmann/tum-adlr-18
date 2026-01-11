@@ -23,6 +23,11 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         self.depth_max = depth_max
         # sdf_trunc is in voxels for nvblox_torch
         self.trunc_voxels = sdf_trunc / voxel_size
+        
+        # Cache for SDF query points
+        self._cached_query_params = None
+        self._cached_query_tensor = None
+        
         self.reset()
 
     def add_obs(
@@ -115,33 +120,38 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             numpy array of shape (sdf_size, sdf_size, sdf_size) with weights.
         """
         if sdf_bbox_center is None or sdf_bbox_size is None:
-            raise ValueError("sdf_bbox_center and sdf_bbox_size must be provided for type='tsdf_dense'")
+            raise ValueError("sdf_bbox_center and sdf_bbox_size must be provided for type='tsdf'")
         
         sdf_bbox_center = np.asarray(sdf_bbox_center)
         
-        # Create grid in normalized [-1, 1] space (matching mesh2sdf convention)
-        # mesh2sdf uses uniform sampling in [-1, 1]^3
-        coords_1d = np.linspace(-1, 1, sdf_size)
-        xx, yy, zz = np.meshgrid(coords_1d, coords_1d, coords_1d, indexing='ij')
-        
-        # Stack into query points (N, 3) in normalized space
-        query_points_normalized = np.stack([xx.ravel(), yy.ravel(), zz.ravel()], axis=1)
-        
-        # Transform to world coordinates and create torch tensor
-        query_points_world = query_points_normalized * (sdf_bbox_size / 2) + sdf_bbox_center
-        query_points_tensor = torch.from_numpy(query_points_world).float().cuda()
+        query_params = (sdf_size, sdf_bbox_center, sdf_bbox_size)
+        if self._cached_query_params == None or not np.isclose(self._cached_query_params[0], query_params[0]) or not np.allclose(self._cached_query_params[1], query_params[1]) or not np.isclose(self._cached_query_params[2], query_params[2]):
+            print("Creating new SDF query grid (should be cached and not happen often)")
+            # Create grid in normalized [-1, 1] space (matching mesh2sdf convention)
+            # mesh2sdf uses uniform sampling in [-1, 1]^3
+            coords_1d = np.linspace(-1, 1, sdf_size)
+            xx, yy, zz = np.meshgrid(coords_1d, coords_1d, coords_1d, indexing='ij')
+            
+            # Stack into query points (N, 3) in normalized space
+            query_points_normalized = np.stack([xx.ravel(), yy.ravel(), zz.ravel()], axis=1)
+            
+            # Transform to world coordinates and create torch tensor
+            query_points_world = query_points_normalized * (sdf_bbox_size / 2) + sdf_bbox_center
+            self._cached_query_tensor = torch.from_numpy(query_points_world).float().cuda()
+            
+            # Update param cache
+            self._cached_query_params = query_params
         
         # Query TSDF layer
         # Returns [N, 2] where column 0 is SDF value, column 1 is weight
-        tsdf_result = self.nvblox_mapper.query_layer(query_type, query_points_tensor)
+        tsdf_result = self.nvblox_mapper.query_layer(query_type, self._cached_query_tensor)
         
         # Extract SDF values and weights
-        sdf_values = tsdf_result[:, 0].cpu().numpy()
+        sdf_values = tsdf_result[:, 0].cpu().numpy() # TODO: Optimize further to avoid CPU-GPU transfer and doing reward computation on GPU
         weights = tsdf_result[:, 1].cpu().numpy()
-        
-        # Handle unobserved regions (weight == 0)
-        # nvblox returns SDF=100.0 for unobserved
-        # TODO: Fix this into two valid value only comparison
+        # print(f"Number of weight=0 voxels: {(weights == 0).sum()}")
+        # print(f"Number of truncated voxels: {(np.abs(sdf_values) >= self.sdf_trunc).sum()}")
+        # print(f"Number of sdf>99 voxels: {(sdf_values >= 99.0).sum()}")
         
         # Reshape to 3D grid
         sdf_grid = sdf_values.reshape(sdf_size, sdf_size, sdf_size)
