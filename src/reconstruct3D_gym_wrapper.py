@@ -292,14 +292,21 @@ class Reconstruct3DGymWrapper(gym.Env):
         mesh_reconstruction = self.reconstruction_policy.reconstruct(type="mesh")
         
         # Get appropriate reconstruction for reward computation based on metric
-        if self.reconstruction_metric == "elementwise_sdf_error":
-            # For SDF-based metrics, get SDF grid for reward computation
+        truncation_distance = None  # Only needed for dense TSDF error
+        if self.reconstruction_metric == "tsdf_dense_error":
+            # For dense TSDF-based metrics, get SDF grid for reward computation
             reward_reconstruction = self.reconstruction_policy.reconstruct(
-                type="sdf",
+                type="tsdf_dense",
                 sdf_size=self.robot_env.sdf_size,
                 sdf_bbox_center=self.robot_env.sdf_bbox_center,
                 sdf_bbox_size=self.robot_env.sdf_bbox_size,
             )
+            # Get truncation distance from policy (required for dense TSDF error)
+            truncation_distance = getattr(self.reconstruction_policy, 'sdf_trunc', 0.08)
+        elif self.reconstruction_metric == "tsdf_sparse_error":
+            # For sparse TSDF-based metrics, get only observed voxels (more efficient)
+            # Truncation distance is included in the returned dict
+            reward_reconstruction = self.reconstruction_policy.reconstruct(type="tsdf_sparse")
         else:
             # For mesh-based metrics (e.g., chamfer_distance), use mesh
             reward_reconstruction = mesh_reconstruction
@@ -312,6 +319,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         reward, error = self.robot_env.reward(
             reconstruction=reward_reconstruction,
             reconstruction_metric=self.reconstruction_metric,
+            truncation_distance=truncation_distance,
             output_error=True,
         )
         if self.collect_timing:
@@ -361,9 +369,9 @@ class Reconstruct3DGymWrapper(gym.Env):
         if self.collect_timing:
             self.timing_stats.reset_mesh_total += time.perf_counter() - t0
 
-        # Compute SDF ground truth if using SDF-based metric
+        # Compute SDF ground truth if using TSDF-based metric
         t0 = time.perf_counter()
-        if self.reconstruction_metric == "elementwise_sdf_error":
+        if self.reconstruction_metric in ("tsdf_dense_error", "tsdf_sparse_error"):
             self.robot_env.compute_static_env_sdf()
         if self.collect_timing:
             self.timing_stats.reset_sdf_total += time.perf_counter() - t0

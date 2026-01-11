@@ -64,37 +64,35 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         
         Args:
             type: "mesh" returns (vertices, faces) tuple as numpy arrays
-                  "tsdf" returns the raw TsdfLayer object
-                  "sdf" returns a 3D numpy array of SDF values for reward computation
-            sdf_size: Resolution of the SDF grid for type="sdf" (default 32)
+                  "tsdf_dense" returns a 3D numpy array of SDF values on a regular grid
+                  "tsdf_sparse" returns dict with observed voxel positions and SDF values
+            sdf_size: Resolution of the SDF grid for type="tsdf_dense" (default 32)
             sdf_bbox_center: Center of the bounding box for SDF query (numpy array shape (3,))
             sdf_bbox_size: Size of the bounding box for SDF query (scalar, length of longest side)
         
         Returns:
             For "mesh": tuple of (vertices, faces) as numpy arrays
-            For "tsdf": TsdfLayer object
-            For "sdf": numpy array of shape (sdf_size, sdf_size, sdf_size)
+            For "tsdf_dense": numpy array of shape (sdf_size, sdf_size, sdf_size)
+            For "tsdf_sparse": dict with 'positions' (N, 3), 'sdf_values' (N,), 'truncation_distance'
         """
         if type == "mesh":
             self.nvblox_mapper.update_color_mesh()
             color_mesh = self.nvblox_mapper.get_color_mesh()
             
-            # Extract vertices and faces as numpy arrays
-            # vertices() and triangles() are methods that return torch tensors
             vertices = color_mesh.vertices().cpu().numpy()
             faces = color_mesh.triangles().cpu().numpy()
             
             return (vertices, faces)
-        elif type == "tsdf":
-            return self.nvblox_mapper.tsdf_layer_view()
-        elif type == "sdf":
-            return self._query_sdf_grid(sdf_size, sdf_bbox_center, sdf_bbox_size)
+        elif type == "tsdf_dense":
+            return self._query_tsdf_grid(sdf_size, sdf_bbox_center, sdf_bbox_size)
+        elif type == "tsdf_sparse":
+            return self._get_sparse_tsdf()
         else:
             raise ValueError(f"Unknown reconstruction type: {type}")
 
-    def _query_sdf_grid(self, sdf_size, sdf_bbox_center, sdf_bbox_size):
+    def _query_sdf_grid(self, sdf_size: float, sdf_bbox_center: np.ndarray, sdf_bbox_size: float):
         """
-        Query the TSDF on a regular grid compatible with reconstruct3D reward function.
+        Query the TSDF on a regular grid.
         
         The grid is constructed to match the same coordinate system used by mesh2sdf
         in reconstruct3D.compute_static_env_sdf():
@@ -109,27 +107,24 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         Returns:
             numpy array of shape (sdf_size, sdf_size, sdf_size) with SDF values.
             Unobserved regions are filled with a large positive value (100.0).
+
+            numpy array of shape (sdf_size, sdf_size, sdf_size) with weights.
         """
         if sdf_bbox_center is None or sdf_bbox_size is None:
-            raise ValueError("sdf_bbox_center and sdf_bbox_size must be provided for type='sdf'")
+            raise ValueError("sdf_bbox_center and sdf_bbox_size must be provided for type='tsdf_dense'")
         
         sdf_bbox_center = np.asarray(sdf_bbox_center)
         
         # Create grid in normalized [-1, 1] space (matching mesh2sdf convention)
         # mesh2sdf uses uniform sampling in [-1, 1]^3
         coords_1d = np.linspace(-1, 1, sdf_size)
-        
-        # Create 3D meshgrid
         xx, yy, zz = np.meshgrid(coords_1d, coords_1d, coords_1d, indexing='ij')
         
         # Stack into query points (N, 3) in normalized space
         query_points_normalized = np.stack([xx.ravel(), yy.ravel(), zz.ravel()], axis=1)
         
-        # Transform from normalized [-1, 1] to world coordinates
-        # world = normalized * (bbox_size/2) + bbox_center
+        # Transform to world coordinates and create torch tensor
         query_points_world = query_points_normalized * (sdf_bbox_size / 2) + sdf_bbox_center
-        
-        # Convert to torch tensor on GPU for nvblox query
         query_points_tensor = torch.from_numpy(query_points_world).float().cuda()
         
         # Query TSDF layer
@@ -146,8 +141,71 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         
         # Reshape to 3D grid
         sdf_grid = sdf_values.reshape(sdf_size, sdf_size, sdf_size)
+        weights_grid = weights.reshape(sdf_size, sdf_size, sdf_size)
         
-        return sdf_grid
+        return sdf_grid, weights_grid
+
+    def _get_sparse_tsdf(self):
+        """
+        Extract sparse TSDF data: only observed voxels with their world positions.
+        
+        This is more efficient than querying a dense grid when only a small fraction
+        of voxels are observed.
+        
+        Returns:
+            dict with:
+                'positions': numpy array (N, 3) - world coordinates of observed voxels
+                'sdf_values': numpy array (N,) - TSDF values at those positions
+                'truncation_distance': float - the truncation distance used by this TSDF
+        """
+        layer = self.nvblox_mapper.tsdf_layer_view()
+        voxel_size = layer.voxel_size()
+        block_dim = layer.block_dim_in_voxels # typically 8
+        
+        # get_all_blocks returns (block_data_list, block_indices_list)
+        # Each block_data is [8, 8, 8, 2] - a 3D grid of voxels, each with (distance, weight)
+        # The [8,8,8] shape is because each block contains 8×8×8 voxels arranged spatially
+        blocks_data, block_indices = layer.get_all_blocks()
+        
+        if not blocks_data:
+            return {
+                'positions': np.empty((0, 3), dtype=np.float32),
+                'sdf_values': np.empty(0, dtype=np.float32),
+                'truncation_distance': self.sdf_trunc,
+            }
+        
+        device = blocks_data[0].device
+        all_positions = []
+        all_distances = []
+        
+        for block_data, block_idx in zip(blocks_data, block_indices):
+            # block_data shape: [8, 8, 8, 2] where last dim is (distance, weight)
+            # A block is allocated when any voxel is observed, but individual voxels
+            # within the block may still be unobserved (weight=0), so we must filter
+            weights = block_data[:, :, :, 1]
+            observed_mask = weights > 0
+            
+            # Get voxel indices and compute world positions, shape (N_observed, 3)
+            voxel_indices = torch.stack(torch.where(observed_mask), dim=1).float()
+            # Ensure block_idx is on same device as voxel_indices
+            block_idx_gpu = block_idx.to(device).float()
+            world_positions = (block_idx_gpu * block_dim + voxel_indices + 0.5) * voxel_size
+            
+            all_positions.append(world_positions)
+            all_distances.append(block_data[:, :, :, 0][observed_mask])
+        
+        if not all_positions:
+            return {
+                'positions': np.empty((0, 3), dtype=np.float32),
+                'sdf_values': np.empty(0, dtype=np.float32),
+                'truncation_distance': self.sdf_trunc,
+            }
+        
+        return {
+            'positions': torch.cat(all_positions, dim=0).cpu().numpy(),
+            'sdf_values': torch.cat(all_distances, dim=0).cpu().numpy(),
+            'truncation_distance': self.sdf_trunc,
+        }
 
     def reset(self, **kwargs):
         # Create mapper params and set truncation distance
