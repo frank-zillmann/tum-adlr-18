@@ -10,10 +10,11 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
     Simple reconstruction policy using nvblox_torch for TSDF and mesh extraction.
     """
 
-    def __init__(self, voxel_size=0.02, sdf_trunc=0.08, **kwargs):
+    def __init__(self, voxel_size=0.02, sdf_trunc=0.08, depth_max=1.0, **kwargs):
         super().__init__(**kwargs)
         self.voxel_size = voxel_size
         self.sdf_trunc = sdf_trunc
+        self.depth_max = depth_max
         # sdf_trunc is in voxels for nvblox_torch
         self.trunc_voxels = sdf_trunc / voxel_size
         self.reset()
@@ -147,6 +148,9 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         mapper_params = MapperParams()
         integrator_params = mapper_params.get_projective_integrator_params()
         integrator_params.projective_integrator_truncation_distance_vox = self.trunc_voxels
+        # Limit integration distance to avoid allocating blocks for far-away depth (background/sky)
+        # This prevents "IndexSet is too large" errors and improves performance.
+        integrator_params.projective_integrator_max_integration_distance_m = self.depth_max
         mapper_params.set_projective_integrator_params(integrator_params)
         
         self.nvblox_mapper = Mapper(
