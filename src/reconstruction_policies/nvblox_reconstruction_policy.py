@@ -64,8 +64,7 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         
         Args:
             type: "mesh" returns (vertices, faces) tuple as numpy arrays
-                  "tsdf_dense" returns a 3D numpy array of SDF values on a regular grid
-                  "tsdf_sparse" returns dict with observed voxel positions and SDF values
+                  "tsdf" returns a 3D numpy array of SDF values on a regular grid
             sdf_size: Resolution of the SDF grid for type="tsdf_dense" (default 32)
             sdf_bbox_center: Center of the bounding box for SDF query (numpy array shape (3,))
             sdf_bbox_size: Size of the bounding box for SDF query (scalar, length of longest side)
@@ -83,14 +82,12 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             faces = color_mesh.triangles().cpu().numpy()
             
             return (vertices, faces)
-        elif type == "tsdf_dense":
-            return self._get_dense_tsdf(sdf_size, sdf_bbox_center, sdf_bbox_size)
-        elif type == "tsdf_sparse":
-            return self._get_sparse_tsdf()
+        elif type == "tsdf":
+            return self._get_dense_tsdf(sdf_size, sdf_bbox_center, sdf_bbox_size, QueryType.TSDF)
         else:
             raise ValueError(f"Unknown reconstruction type: {type}")
 
-    def _get_dense_tsdf(self, sdf_size: float, sdf_bbox_center: np.ndarray, sdf_bbox_size: float):
+    def _get_dense_tsdf(self, sdf_size: float, sdf_bbox_center: np.ndarray, sdf_bbox_size: float, query_type: QueryType =   QueryType.TSDF):
         """
         Query the TSDF on a regular grid.
         
@@ -129,7 +126,7 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         
         # Query TSDF layer
         # Returns [N, 2] where column 0 is SDF value, column 1 is weight
-        tsdf_result = self.nvblox_mapper.query_layer(QueryType.TSDF, query_points_tensor)
+        tsdf_result = self.nvblox_mapper.query_layer(query_type, query_points_tensor)
         
         # Extract SDF values and weights
         sdf_values = tsdf_result[:, 0].cpu().numpy()
@@ -144,52 +141,6 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         weights_grid = weights.reshape(sdf_size, sdf_size, sdf_size)
         
         return sdf_grid, weights_grid
-
-    def _get_sparse_tsdf(self):
-        """Extract sparse TSDF: only observed voxels with grid indices (vectorized, no loop)."""
-        layer = self.nvblox_mapper.tsdf_layer_view()
-        voxel_size = layer.voxel_size()
-        block_dim = layer.block_dim_in_voxels
-        
-        blocks_data, block_indices = layer.get_all_blocks()
-        
-        if not blocks_data:
-            return {
-                'grid_indices': np.empty((0, 3), dtype=np.int32),
-                'sdf_values': np.empty(0, dtype=np.float32),
-                'truncation_distance': self.sdf_trunc,
-            }
-        
-        # Stack all blocks for vectorized processing (no loop)
-        all_blocks = torch.stack(blocks_data)  # [num_blocks, 8, 8, 8, 2]
-        all_block_indices = torch.stack(block_indices).to(all_blocks.device)  # [num_blocks, 3]
-        
-        # Find all observed voxels at once
-        weights = all_blocks[:, :, :, :, 1]
-        block_i, vx, vy, vz = torch.where(weights > 0)
-        
-        if len(block_i) == 0:
-            return {
-                'grid_indices': np.empty((0, 3), dtype=np.int32),
-                'sdf_values': np.empty(0, dtype=np.float32),
-                'truncation_distance': self.sdf_trunc,
-            }
-        
-        # Compute global voxel indices: block_index * block_dim + voxel_offset
-        block_origins = all_block_indices[block_i] * block_dim  # [N, 3]
-        voxel_offsets = torch.stack([vx, vy, vz], dim=1)  # [N, 3]
-        grid_indices = block_origins + voxel_offsets  # [N, 3] global voxel indices
-        
-        # Extract SDF values and weights
-        sdf_values = all_blocks[block_i, vx, vy, vz, 0]
-        weights = all_blocks[block_i, vx, vy, vz, 1]
-        
-        return {
-            'grid_indices': grid_indices.cpu().numpy().astype(np.int32),
-            'sdf_values': sdf_values.cpu().numpy(),
-            'weights': weights.cpu().numpy(),
-            'truncation_distance': self.sdf_trunc,
-        }
 
     def reset(self, **kwargs):
         # Create mapper params and set truncation distance

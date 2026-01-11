@@ -292,8 +292,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         mesh_reconstruction = self.reconstruction_policy.reconstruct(type="mesh")
         
         # Get appropriate reconstruction for reward computation based on metric
-        truncation_distance = None  # Only needed for dense TSDF error
-        if self.reconstruction_metric == "tsdf_dense_error":
+        if self.reconstruction_metric == "voxelwise_tsdf_error":
             # For dense TSDF-based metrics, get SDF grid for reward computation
             reward_reconstruction = self.reconstruction_policy.reconstruct(
                 type="tsdf_dense",
@@ -301,14 +300,9 @@ class Reconstruct3DGymWrapper(gym.Env):
                 sdf_bbox_center=self.robot_env.sdf_bbox_center,
                 sdf_bbox_size=self.robot_env.sdf_bbox_size,
             )
-            # Get truncation distance from policy (required for dense TSDF error)
-            truncation_distance = getattr(self.reconstruction_policy, 'sdf_trunc', 0.08)
-        elif self.reconstruction_metric == "tsdf_sparse_error":
-            # For sparse TSDF-based metrics, get only observed voxels (more efficient)
-            # Truncation distance is included in the returned dict
-            reward_reconstruction = self.reconstruction_policy.reconstruct(type="tsdf_sparse")
-        else:
-            # For mesh-based metrics (e.g., chamfer_distance), use mesh
+            truncation_distance = self.reconstruction_policy.sdf_trunc
+
+        elif self.reconstruction_metric == "chamfer_distance":
             reward_reconstruction = mesh_reconstruction
         
         if self.collect_timing:
@@ -317,16 +311,13 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
         reward, error = self.robot_env.reward(
-            reconstruction=reward_reconstruction,
-            reconstruction_metric=self.reconstruction_metric,
-            truncation_distance=truncation_distance,
-            output_error=True,
+            reconstruction=reconstruction, output_error=True
         )
         if self.collect_timing:
             self.timing_stats.reward_total += time.perf_counter() - t0
             self.timing_stats.n_steps += 1
 
-        # Save eval data if in eval mode (always use mesh for rendering)
+        # Save eval data if in eval mode
         if self.eval_mode:
             self._save_eval_data(
                 reward=reward,
@@ -335,8 +326,8 @@ class Reconstruct3DGymWrapper(gym.Env):
                 reconstruction=mesh_reconstruction,
             )
 
-        # Get observation using mesh reconstruction
         obs = self._get_obs(reconstruction=mesh_reconstruction)
+        # TODO: include tsdf/weights as obs
 
         return obs, reward, done, self._step_count >= self.robot_env.horizon, info
 
@@ -371,7 +362,7 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         # Compute SDF ground truth if using TSDF-based metric
         t0 = time.perf_counter()
-        if self.reconstruction_metric in ("tsdf_dense_error", "tsdf_sparse_error"):
+        if self.reconstruction_metric in ("voxelwise_tsdf_error"):
             self.robot_env.compute_static_env_sdf()
         if self.collect_timing:
             self.timing_stats.reset_sdf_total += time.perf_counter() - t0
