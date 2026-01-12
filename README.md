@@ -17,12 +17,12 @@ source ./install/setup.sh
 ### Known fixes:
 I used a CPU-only laptop and a Google Cloud VM with NVIDIA T4 GPU and `pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570` image. The following fixes were necessary on the VM.
 
-**OpenCV/libGL error** (`libGL.so.1: cannot open shared object file`):
+**1. OpenCV/libGL error** (`libGL.so.1: cannot open shared object file`):
 ```bash
 sudo apt install -y libgl1
 ```
 
-**EGL error** (NVIDIA GPU offscreen rendering backend):
+**2. EGL error** (NVIDIA GPU offscreen rendering backend):
 ```bash
 # Mesa EGL libraries (base requirement)
 sudo apt install -y libegl1-mesa-dev libgles2-mesa-dev
@@ -32,14 +32,14 @@ sudo apt install -y libegl1-mesa-dev libgles2-mesa-dev
 sudo apt install -y libnvidia-gl-570-server
 ```
 
-**MuJoCo rendering backend** (set EGL for headless/offscreen rendering):
+**3. MuJoCo rendering backend** (set EGL for headless/offscreen rendering):
 ```bash
 export MUJOCO_GL=egl
 # Add to ~/.bashrc for persistence:
 echo 'export MUJOCO_GL=egl' >> ~/.bashrc
 ```
 
-**EGL device enumeration fails with Mesa** (`Cannot initialize a EGL device display`):
+**4. EGL device enumeration fails with Mesa** (`Cannot initialize a EGL device display`):
 If you have both NVIDIA and Mesa EGL drivers installed, the device enumeration may fail on Mesa devices. Force NVIDIA-only EGL:
 ```bash
 export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
@@ -47,7 +47,7 @@ export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.js
 echo 'export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json' >> ~/.bashrc
 ```
 
-**GPU render device permission denied** (`failed to open /dev/dri/renderD128: Permission denied`):
+**5. GPU render device permission denied** (`failed to open /dev/dri/renderD128: Permission denied`):
 ```bash
 sudo usermod -aG render $USER
 sudo usermod -aG video $USER
@@ -56,6 +56,14 @@ newgrp render
 newgrp video
 ```
 
+**6. Render images from robosuite are upside down** (e.g. when using EGL backend):
+```bash
+python external/robosuite/robosuite/scripts/setup_macros.py
+```
+In the created file external/robosuite/robosuite/macros_private.py switch from opengl to opencv convention:
+```python
+IMAGE_CONVENTION = "opencv"  # Options are {"opengl", "opencv"}
+```
 ## Usage
 
 ### Testing
