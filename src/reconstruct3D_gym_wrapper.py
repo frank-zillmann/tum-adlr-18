@@ -110,6 +110,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         collect_timing=False,
         eval_log_dir: Optional[Path] = None,
         reconstruction_metric: str = "chamfer_distance",
+        action_penalty_scale: float = 0.0,
     ):
         self._step_count = 0
         self._episode_count = 0
@@ -172,6 +173,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             camera_names=self.camera_names,
             camera_heights=camera_height,
             camera_widths=camera_width,
+            action_penalty_scale=action_penalty_scale,
         )
 
         # Initialize reconstruction policy
@@ -311,6 +313,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
         reward, error = self.robot_env.reward(
+            action=action,
             reconstruction=reward_reconstruction,
             reconstruction_metric=self.reconstruction_metric, 
             truncation_distance = getattr(self.reconstruction_policy, "sdf_trunc", None),  # only needed for voxelwise_tsdf_error

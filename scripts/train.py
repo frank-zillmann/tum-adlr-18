@@ -65,6 +65,7 @@ def make_env(
             collect_timing=collect_timing,
             eval_log_dir=eval_log_dir,
             reconstruction_metric=config.reconstruction_metric,
+            action_penalty_scale=config.action_penalty_scale,
         )
         env = Monitor(env)
         env.reset(seed=seed)
