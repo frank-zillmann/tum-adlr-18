@@ -1,0 +1,2 @@
+reconstruction_policy: open3d
+reconstruction_metric: chamfer_distance

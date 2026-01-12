@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import List
+from typing import List, Union
 import yaml
 
 
@@ -14,8 +14,8 @@ class TrainConfig:
     horizon: int = 40
     camera_height: int = 128
     camera_width: int = 128
-    render_height: int = 64
-    render_width: int = 64
+    render_height: int = 128
+    render_width: int = 128
 
     # PPO hyperparameters
     lr: float = 2e-4
@@ -57,7 +57,12 @@ class TrainConfig:
         )
 
     @classmethod
-    def load(cls, path: str) -> "TrainConfig":
+    def load(cls, paths: Union[str, List[str]]) -> "TrainConfig":
         """Load config, merging with defaults (only override specified fields)."""
-        data = yaml.safe_load(Path(path).read_text()) or {}
+        if isinstance(paths, str):
+            paths = [paths]
+
+        data = {}
+        for path in paths:
+            data.update(yaml.safe_load(Path(path).read_text()) or {})
         return cls(**data)

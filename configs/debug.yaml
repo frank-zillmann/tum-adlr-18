@@ -3,9 +3,8 @@
 n_envs: 1
 n_steps: 32
 batch_size: 32
-total_timesteps: 200
-checkpoint_freq: 100
-eval_freq: 100
+total_timesteps: 64
+eval_freq: 32
 n_eval_episodes: 1
 log_dir: data/debug-logs
 benchmark: true

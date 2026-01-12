@@ -220,7 +220,7 @@ def train(config: TrainConfig, checkpoint: str = None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--config", type=str, default="configs/default.yaml", help="Path to config YAML"
+        "--config", type=str, nargs="+", default=[], help="Path(s) to config YAML"
     )
     parser.add_argument(
         "--checkpoint", type=str, default=None, help="Resume from checkpoint"
