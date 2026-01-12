@@ -54,18 +54,23 @@ def make_env(
             raise ValueError(
                 f"Unknown reconstruction policy: {config.reconstruction_policy}"
             )
-        
+
         env = Reconstruct3DGymWrapper(
             reconstruction_policy=reconstruction_policy,
+            reconstruction_metric=config.reconstruction_metric,
             horizon=config.horizon,
+            control_freq=config.control_freq,
             camera_height=config.camera_height,
             camera_width=config.camera_width,
             render_height=config.render_height,
             render_width=config.render_width,
             collect_timing=collect_timing,
-            eval_log_dir=eval_log_dir,
-            reconstruction_metric=config.reconstruction_metric,
+            sdf_size=config.sdf_size,
+            sdf_padding=config.sdf_padding,
+            reward_scale=config.reward_scale,
+            characteristic_error=config.characteristic_error,
             action_penalty_scale=config.action_penalty_scale,
+            eval_log_dir=eval_log_dir,
         )
         env = Monitor(env)
         env.reset(seed=seed)

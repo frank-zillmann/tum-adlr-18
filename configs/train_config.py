@@ -12,20 +12,30 @@ class TrainConfig:
 
     # Robot Environment
     horizon: int = 40
+    control_freq: int = 5
     camera_height: int = 128
     camera_width: int = 128
     render_height: int = 128
     render_width: int = 128
 
     # Reconstruction policy, metric, and reward
-    reconstruction_policy: str = "open3d" # 'open3d' or 'nvblox'
-    reconstruction_metric: str = "chamfer_distance" # 'chamfer_distance' or 'voxelwise_tsdf_error'
+    reconstruction_policy: str = "open3d"  # 'open3d' or 'nvblox'
+    reconstruction_metric: str = (
+        "chamfer_distance"  # 'chamfer_distance' or 'voxelwise_tsdf_error'
+    )
+
+    sdf_size: int = 32  # Size of the SDF grid along each dimension
+    # Factor by which the SDF box is expanded on each side beyond the object bounds
+    sdf_padding: float = 0.05
+
+    reward_scale: float = 1.0
+    characteristic_error: float = 0.01
     action_penalty_scale: float = 0.1
 
     # PPO and training
-    total_timesteps: int = 100_000 
-    n_envs: int = 1 # Number of parallel environments
-    lr: float = 2e-4 # Learning rate
+    total_timesteps: int = 100_000
+    n_envs: int = 1  # Number of parallel environments
+    lr: float = 2e-4  # Learning rate
     n_steps: int = 1024  # Steps per env before update
     batch_size: int = 256  # Minibatch size for gradient updates
     n_epochs: int = 5  # Passes over rollout buffer per update

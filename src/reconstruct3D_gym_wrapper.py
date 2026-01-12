@@ -102,15 +102,20 @@ class Reconstruct3DGymWrapper(gym.Env):
     def __init__(
         self,
         reconstruction_policy: BaseReconstructionPolicy,
+        reconstruction_metric: str = "chamfer_distance",
         horizon=40,
+        control_freq=5,
         camera_height=128,
         camera_width=128,
         render_height=64,
         render_width=64,
+        sdf_size=32,
+        sdf_padding=0.05,
+        reward_scale=1.0,
+        characteristic_error=0.01,
+        action_penalty_scale=0.0,
         collect_timing=False,
         eval_log_dir: Optional[Path] = None,
-        reconstruction_metric: str = "chamfer_distance",
-        action_penalty_scale: float = 0.0,
     ):
         self._step_count = 0
         self._episode_count = 0
@@ -170,9 +175,14 @@ class Reconstruct3DGymWrapper(gym.Env):
             robots="Panda",
             controller_configs=controller_config,
             horizon=horizon,
+            control_freq=control_freq,
             camera_names=self.camera_names,
             camera_heights=camera_height,
             camera_widths=camera_width,
+            sdf_size=sdf_size,
+            sdf_padding=sdf_padding,
+            reward_scale=reward_scale,
+            characteristic_error=characteristic_error,
             action_penalty_scale=action_penalty_scale,
         )
 
@@ -289,10 +299,10 @@ class Reconstruct3DGymWrapper(gym.Env):
             rgb_image=rgb_image,
             depth_image=depth_image,
         )
-        
+
         # Always get mesh reconstruction for observation/rendering
         mesh_reconstruction = self.reconstruction_policy.reconstruct(type="mesh")
-        
+
         # Get appropriate reconstruction for reward computation based on metric
         if self.reconstruction_metric == "voxelwise_tsdf_error":
             # For dense TSDF-based metrics, get SDF grid for reward computation
@@ -305,8 +315,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         elif self.reconstruction_metric == "chamfer_distance":
             reward_reconstruction = mesh_reconstruction
         else:
-            raise ValueError(f"Unknown reconstruction metric: {self.reconstruction_metric}")
-        
+            raise ValueError(
+                f"Unknown reconstruction metric: {self.reconstruction_metric}"
+            )
+
         if self.collect_timing:
             self.timing_stats.reconstruction_total += time.perf_counter() - t0
 
@@ -315,9 +327,11 @@ class Reconstruct3DGymWrapper(gym.Env):
         reward, error = self.robot_env.reward(
             action=action,
             reconstruction=reward_reconstruction,
-            reconstruction_metric=self.reconstruction_metric, 
-            truncation_distance = getattr(self.reconstruction_policy, "sdf_trunc", None),  # only needed for voxelwise_tsdf_error
-            output_error=True
+            reconstruction_metric=self.reconstruction_metric,
+            truncation_distance=getattr(
+                self.reconstruction_policy, "sdf_trunc", None
+            ),  # only needed for voxelwise_tsdf_error
+            output_error=True,
         )
         if self.collect_timing:
             self.timing_stats.reward_total += time.perf_counter() - t0

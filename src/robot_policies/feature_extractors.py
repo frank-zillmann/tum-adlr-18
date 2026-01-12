@@ -77,9 +77,9 @@ class CameraPoseMeshRenderingExtractor(BaseFeaturesExtractor):
             render = nn.functional.interpolate(
                 render, size=(64, 64), mode="bilinear", align_corners=False
             )
-            print(
-                f"Interpolated render from {observations['reconstruction_render'].shape[-2:]} to (64, 64)"
-            )
+            # print(
+            #     f"Interpolated render from {observations['reconstruction_render'].shape[-2:]} to (64, 64)"
+            # )
         render_features = self.cnn(render)
 
         pose_features = self.pose_net(observations["camera_pose"])
