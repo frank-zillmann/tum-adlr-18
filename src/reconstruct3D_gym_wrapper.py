@@ -324,7 +324,7 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
-        reward, error = self.robot_env.reward(
+        reward, reward_info_dict = self.robot_env.reward(
             action=action,
             reconstruction=reward_reconstruction,
             reconstruction_metric=self.reconstruction_metric,
@@ -340,14 +340,16 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Save eval data if in eval mode
         if self.eval_mode:
             self._save_eval_data(
-                reward=reward,
-                error=error,
+                reward_info_dict=reward_info_dict,
                 obs_dict=obs_dict,
                 reconstruction=mesh_reconstruction,
             )
 
         obs = self._get_obs(reconstruction=mesh_reconstruction)
         # TODO: include tsdf/weights as obs
+
+        # Add detailed error metrics to info which is now called reward_info_dict
+        info.update(reward_info_dict)
 
         return obs, reward, done, self._step_count >= self.robot_env.horizon, info
 
@@ -406,7 +408,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         """Render current camera view."""
         return self.robot_env.render()
 
-    def _save_eval_data(self, reward, error, obs_dict, reconstruction):
+    def _save_eval_data(self, reward_info_dict, obs_dict, reconstruction):
         """Save buffered evaluation data at end of episode."""
         episode_dir = self.eval_log_dir / f"episode_{self._episode_count:04d}"
         episode_dir.mkdir(parents=True, exist_ok=True)
@@ -414,9 +416,9 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Save rewards CSV
         if not (episode_dir / "rewards.csv").exists():
             with open(episode_dir / "rewards.csv", "w") as f:
-                f.write("step,reward,error\n")
+                f.write(",".join(reward_info_dict.keys()) + "\n")
         with open(episode_dir / "rewards.csv", "a") as f:
-            f.write(f"{self._step_count},{reward},{error}\n")
+            f.write(f"{','.join(str(v) for v in reward_info_dict.values())}\n")
 
         # Save images and mesh renders
         for camera_name, obs in obs_dict.items():
