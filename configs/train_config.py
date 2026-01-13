@@ -8,7 +8,11 @@ import yaml
 
 @dataclass
 class TrainConfig:
-    """Training configuration with sensible defaults."""
+    """Training configuration with defaults."""
+
+    # Reconstruction policy and metric (required - must be specified in config)
+    reconstruction_policy: str = field()  # 'open3d' or 'nvblox'
+    reconstruction_metric: str = field()  # 'chamfer_distance' or 'voxelwise_tsdf_error'
 
     # Robot Environment
     horizon: int = 40
@@ -18,19 +22,21 @@ class TrainConfig:
     render_height: int = 128
     render_width: int = 128
 
-    # Reconstruction policy, metric, and reward
-    reconstruction_policy: str = "open3d"  # 'open3d' or 'nvblox'
-    reconstruction_metric: str = (
-        "chamfer_distance"  # 'chamfer_distance' or 'voxelwise_tsdf_error'
-    )
+    # Observations to include (camera_pose, mesh_render, sdf_grid, weight_grid)
+    observations: List[str] = field(default_factory=lambda: ["camera_pose"])
 
-    sdf_gt_size: int = 32  # Size of the ground throuth SDF grid along each dimension
+    # Reward settings
+    sdf_gt_size: int = 32  # Size of the ground truth SDF grid along each dimension
     # Factor by which the SDF box is expanded on each side beyond the object bounds
     sdf_padding: float = 0.05
 
     reward_scale: float = 1.0
     characteristic_error: float = 0.5
     action_penalty_scale: float = 0.02
+
+    # Network
+    features_dim: int = 256
+    hidden_dims: List[int] = field(default_factory=lambda: [128, 64])
 
     # PPO and training
     total_timesteps: int = 100_000
@@ -48,10 +54,6 @@ class TrainConfig:
     checkpoint_freq: int = 10_000
     eval_freq: int = 10_000
     n_eval_episodes: int = 5
-
-    # Network
-    features_dim: int = 128
-    hidden_dims: List[int] = field(default_factory=lambda: [128, 128])
 
     # Logging
     log_dir: str = "data/logs"

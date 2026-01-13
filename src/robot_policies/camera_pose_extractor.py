@@ -24,7 +24,7 @@ class CameraPoseExtractor(BaseFeaturesExtractor):
         self,
         observation_space: gym.spaces.Dict,
         features_dim: int,
-        hidden_dims: List[int] = [64, 64],
+        hidden_dims: List[int] = [64],
     ):
         super().__init__(observation_space, features_dim)
         input_dim = gym_utils.flatdim(observation_space["camera_pose"])

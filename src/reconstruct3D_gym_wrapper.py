@@ -109,6 +109,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         self,
         reconstruction_policy: BaseReconstructionPolicy,
         reconstruction_metric: str = "chamfer_distance",
+        observations: list = [],
         horizon=40,
         control_freq=5,
         camera_height=128,
@@ -132,6 +133,9 @@ class Reconstruct3DGymWrapper(gym.Env):
         self.timing_stats = TimingStats() if collect_timing else None
         self.reconstruction_metric = reconstruction_metric
         self.sdf_gt_size = sdf_gt_size
+
+        # Observations to include in observation space
+        self.observations = observations
 
         # Evaluation logging (only active in val mode with log_dir set)
         self.eval_log_dir = Path(eval_log_dir) if eval_log_dir else None
@@ -196,31 +200,35 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Initialize reconstruction policy
         self.reconstruction_policy = reconstruction_policy
 
-        # Define observation space as Dict
+        # Define observation space as Dict (only include configured observations)
         obs_space_dict = {}
 
-        obs_space_dict["camera_pose"] = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
-        )
-        obs_space_dict["mesh_render"] = spaces.Box(
-            low=0.0,
-            high=1.0,
-            shape=(1, *self.render_resolution),
-            dtype=np.float32,
-        )
-        obs_space_dict["sdf_grid"] = spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=(1, sdf_gt_size, sdf_gt_size, sdf_gt_size),
-            dtype=np.float32,
-        )
-        obs_space_dict["weight_grid"] = spaces.Box(
-            low=0.0,
-            high=np.inf,
-            shape=(1, sdf_gt_size, sdf_gt_size, sdf_gt_size),
-            dtype=np.float32,
-        )
-
+        if "camera_pose" in self.observations:
+            obs_space_dict["camera_pose"] = spaces.Box(
+                low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
+            )
+        if "mesh_render" in self.observations:
+            obs_space_dict["mesh_render"] = spaces.Box(
+                low=0.0,
+                high=1.0,
+                shape=(1, *self.render_resolution),
+                dtype=np.float32,
+            )
+        if "sdf_grid" in self.observations:
+            obs_space_dict["sdf_grid"] = spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(1, sdf_gt_size, sdf_gt_size, sdf_gt_size),
+                dtype=np.float32,
+            )
+        if "weight_grid" in self.observations:
+            obs_space_dict["weight_grid"] = spaces.Box(
+                low=0.0,
+                high=np.inf,
+                shape=(1, sdf_gt_size, sdf_gt_size, sdf_gt_size),
+                dtype=np.float32,
+            )
+        print(f"Observation space keys: {list(obs_space_dict.keys())}")
         self.observation_space = spaces.Dict(obs_space_dict)
 
         # Action space: use robot's native action space
@@ -280,6 +288,10 @@ class Reconstruct3DGymWrapper(gym.Env):
                 1, self.sdf_gt_size, self.sdf_gt_size, self.sdf_gt_size
             ).astype(np.float32)
         if weight_grid is not None:
+            # n_nonzero_weights = np.sum(weight_grid > 0)
+            # print(
+            #     f"Weight grid non-zero voxels: {n_nonzero_weights}/{weight_grid.size}"
+            # )
             obs["weight_grid"] = weight_grid.reshape(
                 1, self.sdf_gt_size, self.sdf_gt_size, self.sdf_gt_size
             ).astype(np.float32)

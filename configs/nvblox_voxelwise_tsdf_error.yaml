@@ -1,2 +1,7 @@
 reconstruction_policy: nvblox
 reconstruction_metric: voxelwise_tsdf_error
+
+observations:
+  - camera_pose
+  - mesh_render
+  - weight_grid

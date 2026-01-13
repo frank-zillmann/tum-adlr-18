@@ -1,2 +1,6 @@
 reconstruction_policy: open3d
 reconstruction_metric: chamfer_distance
+
+observations:
+  - camera_pose
+  - mesh_render

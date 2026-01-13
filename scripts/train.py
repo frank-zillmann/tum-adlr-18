@@ -64,6 +64,7 @@ def make_env(
         env = Reconstruct3DGymWrapper(
             reconstruction_policy=reconstruction_policy,
             reconstruction_metric=config.reconstruction_metric,
+            observations=config.observations,
             horizon=config.horizon,
             control_freq=config.control_freq,
             camera_height=config.camera_height,
@@ -184,14 +185,23 @@ def train(config: TrainConfig, checkpoint: str = None):
     eval_log_dir = log_dir / "eval_data"
     eval_env = DummyVecEnv([make_env(config, seed=42, eval_log_dir=eval_log_dir)])
 
-    # Policy kwargs - Using CombinedExtractor with all feature extractors
-    # Each sub-extractor outputs its own features_dim, which are concatenated
-    # and then combined into the final features_dim
-    extractors_config = [
-        (CameraPoseExtractor, {"features_dim": 32, "hidden_dims": [64, 64]}),
-        (MeshRenderingExtractor, {"features_dim": 128}),
-        (WeightGridExtractor, {"features_dim": 128}),
-    ]
+    # Build extractors config based on configured observations
+    extractors_config = []
+    if "camera_pose" in config.observations:
+        extractors_config.append(
+            (CameraPoseExtractor, {"features_dim": 32, "hidden_dims": [64]})
+        )
+    if "mesh_render" in config.observations:
+        extractors_config.append(
+            (MeshRenderingExtractor, {"features_dim": 128})
+        )
+    if "sdf_grid" in config.observations:
+        # TODO: Add SdfGridExtractor when implemented
+        print("Warning: sdf_grid observation enabled but no SdfGridExtractor exists yet")
+    if "weight_grid" in config.observations:
+        extractors_config.append(
+            (WeightGridExtractor, {"features_dim": 128})
+        )
 
     policy_kwargs = {
         "features_extractor_class": CombinedExtractor,
