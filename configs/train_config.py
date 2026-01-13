@@ -29,8 +29,8 @@ class TrainConfig:
     sdf_padding: float = 0.05
 
     reward_scale: float = 1.0
-    characteristic_error: float = 0.01
-    action_penalty_scale: float = 0.1
+    characteristic_error: float = 0.5
+    action_penalty_scale: float = 0.02
 
     # PPO and training
     total_timesteps: int = 100_000
