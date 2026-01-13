@@ -14,7 +14,7 @@ cd tum-adlr-18
 source ./install/setup.sh
 ```
 
-### Known fixes:
+### Known issues and fixes:
 I used a CPU-only laptop and a Google Cloud VM with NVIDIA T4 GPU and `pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570` image. The following fixes were necessary on the VM.
 
 **1. OpenCV/libGL error** (`libGL.so.1: cannot open shared object file`):
@@ -64,6 +64,14 @@ In the created file external/robosuite/robosuite/macros_private.py switch from o
 ```python
 IMAGE_CONVENTION = "opencv"  # Options are {"opengl", "opencv"}
 ```
+
+**Segmentation fault after several thousand steps** 
+
+`pgrep -f "train.py"
+[1]+  Segmentation fault      (core dumped) nohup python scripts/train.py --config configs/nvblox_voxelwise_tsdf_error.yaml > nvblox_voxelwise_tsdf_error.log 2>&1`
+
+No fix found yet. Workaround: Restart training from last checkpoint.
+
 ## Usage
 
 ### Testing
