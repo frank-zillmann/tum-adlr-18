@@ -53,7 +53,7 @@ class TrainConfig:
 
     checkpoint_freq: int = 10_000
     eval_freq: int = 10_000
-    n_eval_episodes: int = 5
+    n_eval_episodes: int = 1
 
     # Logging
     log_dir: str = "data/logs"

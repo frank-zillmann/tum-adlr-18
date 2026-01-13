@@ -21,14 +21,20 @@ import numpy as np
 # CONFIGURATION - Adjust these variables to change the grid layout
 # ============================================================================
 
-# Each position in the 2x2 grid is defined by (view, type)
-# Available views: "birdview", "frontview", "sideview", "robot0_eye_in_hand"
-# Available types: "depth", "gt", "image", "reconstruction"
+# Each position in the 2x2 grid is defined by a lambda that takes a step number
+# and returns the filename stem (without .png extension).
+#
+# For dynamic images that change per step:
+#   lambda step: f"step_{step:03d}_robot0_eye_in_hand_depth"
+#
+# For static images that stay constant throughout the video:
+#   lambda step: "birdview_mesh_gt"
+#
 
-TOP_LEFT = ("robot0_eye_in_hand", "depth")
-TOP_RIGHT = ("birdview", "reconstruction")
-BOTTOM_LEFT = ("frontview", "image")
-BOTTOM_RIGHT = ("birdview", "gt")
+TOP_LEFT = lambda step: f"step_{step:03d}_robot0_eye_in_hand_depth"
+TOP_RIGHT = lambda step: f"step_{step:03d}_birdview_mesh_reconstruction"
+BOTTOM_LEFT = lambda step: f"step_{step:03d}_frontview_image"
+BOTTOM_RIGHT = lambda step: "birdview_mesh_gt"
 
 # Common size for all images (width, height)
 COMMON_SIZE = (128, 128)
@@ -39,9 +45,25 @@ FPS = 4
 # ============================================================================
 
 
-def get_image_pattern(view: str, img_type: str) -> str:
-    """Generate the image filename pattern for a given view and type."""
-    return f"step_*_{view}_{img_type}.png"
+def get_dynamic_image_pattern(position_fn) -> str | None:
+    """
+    Generate the image filename pattern for a position function.
+    Returns None if the position is static (doesn't depend on step).
+    """
+    # Test with two different step numbers to detect if it's dynamic
+    test_step_1 = position_fn(1)
+    test_step_2 = position_fn(2)
+
+    if test_step_1 == test_step_2:
+        # Static image - doesn't change with step
+        return None
+
+    # Dynamic image - replace the step number with wildcard
+    # Find where the step number is in the filename and replace with *
+    import re
+
+    pattern = re.sub(r"step_\d+", "step_*", test_step_1)
+    return f"{pattern}.png"
 
 
 def extract_step_number(filename: str) -> int:
@@ -65,30 +87,42 @@ def load_and_resize_image(path: str, target_size: tuple) -> np.ndarray:
     return img
 
 
-def get_sorted_image_files(folder: str, view: str, img_type: str) -> list:
-    """Get sorted list of image files for a given view and type."""
-    pattern = os.path.join(folder, get_image_pattern(view, img_type))
+def get_sorted_image_files(folder: str, position_fn) -> list:
+    """Get sorted list of image files for a given position function."""
+    pattern_suffix = get_dynamic_image_pattern(position_fn)
+    if pattern_suffix is None:
+        # Static image - return empty list (we'll need to find steps another way)
+        return []
+
+    pattern = os.path.join(folder, pattern_suffix)
     files = glob.glob(pattern)
     files.sort(key=lambda x: extract_step_number(os.path.basename(x)))
     return files
 
 
+def find_all_steps(folder: str, positions: list) -> list:
+    """Find all step numbers by checking all dynamic positions."""
+    for position_fn in positions:
+        files = get_sorted_image_files(folder, position_fn)
+        if files:
+            return [extract_step_number(os.path.basename(f)) for f in files]
+
+    raise ValueError(
+        f"No dynamic images found in {folder}. At least one position must be dynamic."
+    )
+
+
 def create_grid_frame(
     folder: str,
     step: int,
-    top_left: tuple,
-    top_right: tuple,
-    bottom_left: tuple,
-    bottom_right: tuple,
+    positions: list,
     common_size: tuple,
 ) -> np.ndarray:
     """Create a single 2x2 grid frame for a given step."""
 
-    positions = [top_left, top_right, bottom_left, bottom_right]
-
     images = []
-    for view, img_type in positions:
-        filename = f"step_{step:03d}_{view}_{img_type}.png"
+    for position_fn in positions:
+        filename = f"{position_fn(step)}.png"
         filepath = os.path.join(folder, filename)
         img = load_and_resize_image(filepath, common_size)
         images.append(img)
@@ -120,33 +154,35 @@ def create_video(
     if output_path is None:
         output_path = os.path.join(episode_folder, "episode_video.mp4")
 
-    # Find all steps by looking at one of the image types
-    reference_files = get_sorted_image_files(episode_folder, TOP_LEFT[0], TOP_LEFT[1])
+    positions = [TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT]
 
-    if not reference_files:
-        raise ValueError(
-            f"No images found in {episode_folder} for {TOP_LEFT[0]}_{TOP_LEFT[1]}"
-        )
+    # Find all steps by looking at dynamic image types
+    steps = find_all_steps(episode_folder, positions)
 
-    # Extract step numbers
-    steps = [extract_step_number(os.path.basename(f)) for f in reference_files]
+    if not steps:
+        raise ValueError(f"No images found in {episode_folder}")
+
+    # Determine which positions are dynamic vs static
+    def get_position_label(pos_fn):
+        test_name = pos_fn(0)
+        pattern = get_dynamic_image_pattern(pos_fn)
+        if pattern is None:
+            return f"{test_name} (static)"
+        return test_name.replace("step_000_", "")
 
     print(f"Found {len(steps)} steps")
     print(f"Grid layout:")
-    print(f"  Top Left:     {TOP_LEFT[0]}/{TOP_LEFT[1]}")
-    print(f"  Top Right:    {TOP_RIGHT[0]}/{TOP_RIGHT[1]}")
-    print(f"  Bottom Left:  {BOTTOM_LEFT[0]}/{BOTTOM_LEFT[1]}")
-    print(f"  Bottom Right: {BOTTOM_RIGHT[0]}/{BOTTOM_RIGHT[1]}")
+    print(f"  Top Left:     {get_position_label(TOP_LEFT)}")
+    print(f"  Top Right:    {get_position_label(TOP_RIGHT)}")
+    print(f"  Bottom Left:  {get_position_label(BOTTOM_LEFT)}")
+    print(f"  Bottom Right: {get_position_label(BOTTOM_RIGHT)}")
     print(f"  Common Size:  {COMMON_SIZE}")
 
     # Create first frame to get dimensions
     first_frame = create_grid_frame(
         episode_folder,
         steps[0],
-        TOP_LEFT,
-        TOP_RIGHT,
-        BOTTOM_LEFT,
-        BOTTOM_RIGHT,
+        positions,
         COMMON_SIZE,
     )
 
@@ -162,10 +198,7 @@ def create_video(
         frame = create_grid_frame(
             episode_folder,
             step,
-            TOP_LEFT,
-            TOP_RIGHT,
-            BOTTOM_LEFT,
-            BOTTOM_RIGHT,
+            positions,
             COMMON_SIZE,
         )
         out.write(frame)
