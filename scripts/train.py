@@ -42,11 +42,11 @@ def make_env(
             )
 
             reconstruction_policy = Open3DTSDFGenerator(
-                bbox_min=np.array([-0.5, -0.5, 0.5]),
-                bbox_max=np.array([0.5, 0.5, 1.5]),
                 voxel_size=0.01,
                 sdf_trunc=0.04,
+                depth_max=1.0,
             )
+
         elif config.reconstruction_policy == "nvblox":
             from src.reconstruction_policies.nvblox_reconstruction_policy import (
                 NvbloxReconstructionPolicy,
@@ -192,16 +192,14 @@ def train(config: TrainConfig, checkpoint: str = None):
             (CameraPoseExtractor, {"features_dim": 32, "hidden_dims": [64]})
         )
     if "mesh_render" in config.observations:
-        extractors_config.append(
-            (MeshRenderingExtractor, {"features_dim": 128})
-        )
+        extractors_config.append((MeshRenderingExtractor, {"features_dim": 128}))
     if "sdf_grid" in config.observations:
         # TODO: Add SdfGridExtractor when implemented
-        print("Warning: sdf_grid observation enabled but no SdfGridExtractor exists yet")
-    if "weight_grid" in config.observations:
-        extractors_config.append(
-            (WeightGridExtractor, {"features_dim": 128})
+        print(
+            "Warning: sdf_grid observation enabled but no SdfGridExtractor exists yet"
         )
+    if "weight_grid" in config.observations:
+        extractors_config.append((WeightGridExtractor, {"features_dim": 128}))
 
     policy_kwargs = {
         "features_extractor_class": CombinedExtractor,

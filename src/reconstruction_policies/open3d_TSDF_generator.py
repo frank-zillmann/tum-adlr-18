@@ -30,38 +30,32 @@ class Open3DTSDFGenerator(BaseReconstructionPolicy):
 
     def __init__(
         self,
-        bbox_min: np.ndarray, # TODO: as arguments for methods using them, not as class members
-        bbox_max: np.ndarray,
-        voxel_size: float,
-        sdf_trunc: float,
+        voxel_size: float = 0.01,
+        sdf_trunc: float = 0.04,
+        depth_max: float = 1.0,
         device: Optional[str] = None,
     ):
         """
         Initialize TSDF generator.
 
         Args:
-            bbox_min: (3,) array, minimum corner of bounding box for SDF grid queries (meters)
-            bbox_max: (3,) array, maximum corner of bounding box for SDF grid queries (meters)
             voxel_size: Size of voxel in meters
             sdf_trunc: Truncation distance for TSDF in meters. Controls how far from
                 surfaces we track signed distance. Larger values = more computation but
                 less truncation.
+            depth_max: Maximum depth to integrate in meters. Depth pixels farther
+                than this are ignored (useful for filtering noisy far-field depth).
             device: Device to use for computation ("CPU:0" or "CUDA:0").
                 If None, automatically selects CUDA if available, else CPU.
         """
-        self.bbox_min = np.asarray(bbox_min)
-        self.bbox_max = np.asarray(bbox_max)
         self.voxel_size = voxel_size
         self.sdf_trunc = sdf_trunc
+        self.depth_max = depth_max
 
         # Auto-select device if not specified
         device_str = device if device is not None else get_default_device()
         self.device = o3d.core.Device(device_str)
         print(f"[Open3D TSDF] Using device: {device_str}")
-
-        # Compute grid dimensions (informational, for get_sdf_grid)
-        self.volume_size = self.bbox_max - self.bbox_min
-        self.grid_shape = np.ceil(self.volume_size / voxel_size).astype(int)
 
         # Block size for VoxelBlockGrid (typically 8 or 16)
         self.block_resolution = 8
@@ -90,7 +84,6 @@ class Open3DTSDFGenerator(BaseReconstructionPolicy):
         camera_extrinsic: np.ndarray,
         rgb_image: Optional[np.ndarray] = None,
         depth_image: Optional[np.ndarray] = None,
-        depth_max: float = 1.0,
         depth_scale: float = 1.0,
         **kwargs,
     ):
@@ -102,8 +95,6 @@ class Open3DTSDFGenerator(BaseReconstructionPolicy):
             camera_extrinsic: 4x4 camera pose (camera to world transform)
             rgb_image: RGB image (H, W, 3) - currently unused, for API compatibility
             depth_image: Depth map (H, W) in meters (if depth_scale=1.0)
-            depth_max: Maximum depth to integrate in meters. Depth pixels farther
-                than this are ignored (useful for filtering noisy far-field depth).
             depth_scale: Scale factor to convert depth values to meters.
                 Use 1.0 if depth is already in meters, 1000.0 if in millimeters.
             **kwargs: Additional arguments (ignored)
@@ -135,7 +126,7 @@ class Open3DTSDFGenerator(BaseReconstructionPolicy):
         # This may fail if no voxels are within the depth range (camera pointing at empty space)
         try:
             frustum_block_coords = self.volume.compute_unique_block_coordinates(
-                depth_t, intrinsic_t, extrinsic_t, depth_scale, depth_max
+                depth_t, intrinsic_t, extrinsic_t, depth_scale, self.depth_max
             )
         except RuntimeError as e:
             if "No block is touched" in str(e):
@@ -151,11 +142,11 @@ class Open3DTSDFGenerator(BaseReconstructionPolicy):
             intrinsic_t,
             extrinsic_t,
             depth_scale,
-            depth_max,
+            self.depth_max,
             trunc_voxel_multiplier,
         )
 
-    def reconstruct(self, type="mesh", **kwargs):
+    def reconstruct(self, type="mesh", bbox_center=None, bbox_size=None, **kwargs):
         if type == "mesh":
             return self.extract_mesh(**kwargs)
         elif type == "point_cloud":
