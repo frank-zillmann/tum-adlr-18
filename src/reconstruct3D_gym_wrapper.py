@@ -117,7 +117,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         render_height=64,
         render_width=64,
         sdf_gt_size=32,
-        sdf_padding=0.05,
+        bbox_padding=0.05,
         reward_scale=1.0,
         characteristic_error=0.01,
         action_penalty_scale=0.0,
@@ -191,7 +191,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             camera_heights=camera_height,
             camera_widths=camera_width,
             sdf_size=sdf_gt_size,
-            sdf_padding=sdf_padding,
+            bbox_padding=bbox_padding,
             reward_scale=reward_scale,
             characteristic_error=characteristic_error,
             action_penalty_scale=action_penalty_scale,
@@ -369,8 +369,8 @@ class Reconstruct3DGymWrapper(gym.Env):
             tsdf_reconstruction = self.reconstruction_policy.reconstruct(
                 type="tsdf",
                 sdf_size=self.sdf_gt_size,
-                sdf_bbox_center=self.robot_env.sdf_bbox_center,
-                sdf_bbox_size=self.robot_env.sdf_bbox_size,
+                bbox_center=self.robot_env.bbox_center,
+                bbox_size=self.robot_env.bbox_size,
             )
         if self.collect_timing:
             self.timing_stats.reconstruction_total += time.perf_counter() - t0

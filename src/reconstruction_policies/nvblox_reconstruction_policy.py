@@ -75,8 +75,8 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         self,
         type="mesh",
         sdf_size=32,
-        sdf_bbox_center=None,
-        sdf_bbox_size=None,
+        bbox_center=None,
+        bbox_size=None,
         **kwargs,
     ):
         """
@@ -86,8 +86,8 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             type: "mesh" returns (vertices, faces) tuple as numpy arrays
                   "tsdf" returns a 3D numpy array of SDF values on a regular grid
             sdf_size: Resolution of the SDF grid for type="tsdf_dense" (default 32)
-            sdf_bbox_center: Center of the bounding box for SDF query (numpy array shape (3,))
-            sdf_bbox_size: Size of the bounding box for SDF query (scalar, length of longest side)
+            bbox_center: Center of the bounding box for SDF query (numpy array shape (3,))
+            bbox_size: Size of the bounding box for SDF query (scalar, length of longest side)
 
         Returns:
             For "mesh": tuple of (vertices, faces) as numpy arrays
@@ -104,7 +104,7 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             return (vertices, faces)
         elif type == "tsdf":
             return self._get_dense_tsdf(
-                sdf_size, sdf_bbox_center, sdf_bbox_size, QueryType.TSDF
+                sdf_size, bbox_center, bbox_size, QueryType.TSDF
             )
         else:
             raise ValueError(f"Unknown reconstruction type: {type}")
@@ -112,8 +112,8 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
     def _get_dense_tsdf(
         self,
         sdf_size: float,
-        sdf_bbox_center: np.ndarray,
-        sdf_bbox_size: float,
+        bbox_center: np.ndarray,
+        bbox_size: float,
         query_type: QueryType = QueryType.TSDF,
     ):
         """
@@ -126,8 +126,8 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
 
         Args:
             sdf_size: Resolution of the grid (grid will be sdf_size^3)
-            sdf_bbox_center: Center of bounding box in world coordinates, shape (3,)
-            sdf_bbox_size: Size of bounding box (length of longest axis after padding)
+            bbox_center: Center of bounding box in world coordinates, shape (3,)
+            bbox_size: Size of bounding box (length of longest axis after padding)
 
         Returns:
             numpy array of shape (sdf_size, sdf_size, sdf_size) with SDF values.
@@ -135,14 +135,14 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
 
             numpy array of shape (sdf_size, sdf_size, sdf_size) with weights.
         """
-        if sdf_bbox_center is None or sdf_bbox_size is None:
+        if bbox_center is None or bbox_size is None:
             raise ValueError(
-                "sdf_bbox_center and sdf_bbox_size must be provided for type='tsdf'"
+                "bbox_center and bbox_size must be provided for type='tsdf'"
             )
 
-        sdf_bbox_center = np.asarray(sdf_bbox_center)
+        bbox_center = np.asarray(bbox_center)
 
-        query_params = (sdf_size, sdf_bbox_center, sdf_bbox_size)
+        query_params = (sdf_size, bbox_center, bbox_size)
         if (
             self._cached_query_params == None
             or not np.isclose(self._cached_query_params[0], query_params[0])
@@ -161,9 +161,7 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             )
 
             # Transform to world coordinates and create torch tensor
-            query_points_world = (
-                query_points_normalized * (sdf_bbox_size / 2) + sdf_bbox_center
-            )
+            query_points_world = query_points_normalized * (bbox_size / 2) + bbox_center
             self._cached_query_tensor = (
                 torch.from_numpy(query_points_world).float().cuda()
             )

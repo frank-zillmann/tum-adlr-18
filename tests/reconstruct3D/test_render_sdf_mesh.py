@@ -32,9 +32,9 @@ def test_render_sdf_mesh(
     if sdf_grid is None:
         sdf_grid = env.sdf_grid
     if bbox_center is None:
-        bbox_center = env.sdf_bbox_center
+        bbox_center = env.bbox_center
     if bbox_size is None:
-        bbox_size = env.sdf_bbox_size
+        bbox_size = env.bbox_size
 
     print("\n" + "=" * 60)
     print("TEST 3: Rendering Mesh from SDF")

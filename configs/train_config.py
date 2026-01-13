@@ -28,7 +28,7 @@ class TrainConfig:
     # Reward settings
     sdf_gt_size: int = 32  # Size of the ground truth SDF grid along each dimension
     # Factor by which the SDF box is expanded on each side beyond the object bounds
-    sdf_padding: float = 0.05
+    bbox_padding: float = 0.05
 
     reward_scale: float = 1.0
     characteristic_error: float = 0.5

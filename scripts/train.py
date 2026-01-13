@@ -73,7 +73,7 @@ def make_env(
             render_width=config.render_width,
             collect_timing=collect_timing,
             sdf_gt_size=config.sdf_gt_size,
-            sdf_padding=config.sdf_padding,
+            bbox_padding=config.bbox_padding,
             reward_scale=config.reward_scale,
             characteristic_error=config.characteristic_error,
             action_penalty_scale=config.action_penalty_scale,
