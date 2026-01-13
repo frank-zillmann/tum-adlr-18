@@ -29,6 +29,7 @@ class TimingStats:
     # Step timing
     n_steps: int = 0
     simulation_total: float = 0.0
+    obs_integration_total: float = 0.0
     reconstruction_total: float = 0.0
     reward_total: float = 0.0
 
@@ -53,6 +54,7 @@ class TimingStats:
             f"",
             f"  Step breakdown (avg {avg_step:.1f} ms):",
             f"    Simulation:     {self.simulation_total/self.n_steps*1000:6.1f} ms ({100*self.simulation_total/step_total:5.1f}%)",
+            f"    Obs integration:{self.obs_integration_total/self.n_steps*1000:6.1f} ms ({100*self.obs_integration_total/step_total:5.1f}%)",
             f"    Reconstruction: {self.reconstruction_total/self.n_steps*1000:6.1f} ms ({100*self.reconstruction_total/step_total:5.1f}%)",
             f"    Reward:         {self.reward_total/self.n_steps*1000:6.1f} ms ({100*self.reward_total/step_total:5.1f}%)",
         ]
@@ -254,14 +256,15 @@ class Reconstruct3DGymWrapper(gym.Env):
         self, action: np.ndarray
     ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
         """Execute action and return (obs, reward, terminated, truncated, info)."""
+        self._step_count += 1
+        
         # Step robot environment (physics + rendering)
         t0 = time.perf_counter()
         obs_dict, _, done, info = self.robot_env.step(action)
-        self._step_count += 1
         if self.collect_timing:
             self.timing_stats.simulation_total += time.perf_counter() - t0
 
-        # Get depth observation and integrate into reconstruction
+        # Get depth observation and convert to real depth map
         rgb_image = obs_dict.get("robot0_eye_in_hand_image")
         depth_image = obs_dict.get("robot0_eye_in_hand_depth")
         if depth_image is not None:
@@ -276,8 +279,9 @@ class Reconstruct3DGymWrapper(gym.Env):
                 print(
                     f"[WARNING] Depth map has {n_nan} NaN values and {n_invalid} out-of-range values at step {self._step_count}"
                 )
-            depth_image = np.nan_to_num(depth_image, nan=1.0, posinf=1.0, neginf=0.0)
-            depth_image = np.clip(depth_image, 0.0, 1.0)
+                depth_image = np.nan_to_num(depth_image, nan=1.0, posinf=1.0, neginf=0.0)
+                depth_image = np.clip(depth_image, 0.0, 1.0)
+            
             depth_image = get_real_depth_map(self.robot_env.sim, depth_image)
 
         # Get camera intrinsics and extrinsics
@@ -291,15 +295,17 @@ class Reconstruct3DGymWrapper(gym.Env):
             self.robot_env.sim, "robot0_eye_in_hand"
         )
 
-        # TSDF integration
-        t0 = time.perf_counter()
+        # Obs integration
         self.reconstruction_policy.add_obs(
             camera_intrinsic=intrinsic,
             camera_extrinsic=extrinsic,
             rgb_image=rgb_image,
             depth_image=depth_image,
         )
+        if self.collect_timing:
+            self.timing_stats.obs_integration_total += time.perf_counter() - t0
 
+        t0 = time.perf_counter()
         # Always get mesh reconstruction for observation/rendering
         mesh_reconstruction = self.reconstruction_policy.reconstruct(type="mesh")
 
