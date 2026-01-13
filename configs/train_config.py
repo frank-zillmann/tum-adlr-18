@@ -24,7 +24,7 @@ class TrainConfig:
         "chamfer_distance"  # 'chamfer_distance' or 'voxelwise_tsdf_error'
     )
 
-    sdf_size: int = 32  # Size of the SDF grid along each dimension
+    sdf_gt_size: int = 32  # Size of the ground throuth SDF grid along each dimension
     # Factor by which the SDF box is expanded on each side beyond the object bounds
     sdf_padding: float = 0.05
 

@@ -18,9 +18,11 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from src.reconstruct3D_gym_wrapper import Reconstruct3DGymWrapper
-from src.robot_policies.feature_extractors import (
+from src.robot_policies import (
     CameraPoseExtractor,
-    CameraPoseMeshRenderingExtractor,
+    MeshRenderingExtractor,
+    WeightGridExtractor,
+    CombinedExtractor,
 )
 from configs.train_config import TrainConfig
 
@@ -50,7 +52,9 @@ def make_env(
                 NvbloxReconstructionPolicy,
             )
 
-            reconstruction_policy = NvbloxReconstructionPolicy(voxel_size=0.01, sdf_trunc=0.04, depth_max=1.0)
+            reconstruction_policy = NvbloxReconstructionPolicy(
+                voxel_size=0.01, sdf_trunc=0.04, depth_max=1.0
+            )
 
         else:
             raise ValueError(
@@ -67,7 +71,7 @@ def make_env(
             render_height=config.render_height,
             render_width=config.render_width,
             collect_timing=collect_timing,
-            sdf_size=config.sdf_size,
+            sdf_gt_size=config.sdf_gt_size,
             sdf_padding=config.sdf_padding,
             reward_scale=config.reward_scale,
             characteristic_error=config.characteristic_error,
@@ -180,19 +184,23 @@ def train(config: TrainConfig, checkpoint: str = None):
     eval_log_dir = log_dir / "eval_data"
     eval_env = DummyVecEnv([make_env(config, seed=42, eval_log_dir=eval_log_dir)])
 
-    # Policy kwargs
-    policy_kwargs = {
-        "features_extractor_class": CameraPoseMeshRenderingExtractor,
-        "features_extractor_kwargs": {"features_dim": config.features_dim},
-        "net_arch": config.hidden_dims,
-    }
+    # Policy kwargs - Using CombinedExtractor with all feature extractors
+    # Each sub-extractor outputs its own features_dim, which are concatenated
+    # and then combined into the final features_dim
+    extractors_config = [
+        (CameraPoseExtractor, {"features_dim": 32, "hidden_dims": [64, 64]}),
+        (MeshRenderingExtractor, {"features_dim": 128}),
+        (WeightGridExtractor, {"features_dim": 128}),
+    ]
 
-    # # Policy kwargs
-    # policy_kwargs = {
-    #     "features_extractor_class": CameraPoseExtractor,
-    #     "features_extractor_kwargs": {"features_dim": config.features_dim},
-    #     "net_arch": config.hidden_dims,
-    # }
+    policy_kwargs = {
+        "features_extractor_class": CombinedExtractor,
+        "features_extractor_kwargs": {
+            "features_dim": config.features_dim,
+            "extractors_config": extractors_config,
+        },
+        "net_arch": dict(pi=config.hidden_dims, vf=config.hidden_dims),
+    }
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[PyTorch/SB3] Using device: {device}")

@@ -46,7 +46,10 @@ class TimingStats:
             return "No timing data collected"
 
         step_total = (
-            self.simulation_total + self.obs_integration_total + self.reconstruction_total + self.reward_total
+            self.simulation_total
+            + self.obs_integration_total
+            + self.reconstruction_total
+            + self.reward_total
         )
         avg_step = step_total / self.n_steps * 1000  # ms
 
@@ -112,7 +115,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         camera_width=128,
         render_height=64,
         render_width=64,
-        sdf_size=32,
+        sdf_gt_size=32,
         sdf_padding=0.05,
         reward_scale=1.0,
         characteristic_error=0.01,
@@ -128,6 +131,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         self.render_resolution = (render_height, render_width)
         self.timing_stats = TimingStats() if collect_timing else None
         self.reconstruction_metric = reconstruction_metric
+        self.sdf_gt_size = sdf_gt_size
 
         # Evaluation logging (only active in val mode with log_dir set)
         self.eval_log_dir = Path(eval_log_dir) if eval_log_dir else None
@@ -182,7 +186,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             camera_names=self.camera_names,
             camera_heights=camera_height,
             camera_widths=camera_width,
-            sdf_size=sdf_size,
+            sdf_size=sdf_gt_size,
             sdf_padding=sdf_padding,
             reward_scale=reward_scale,
             characteristic_error=characteristic_error,
@@ -193,19 +197,31 @@ class Reconstruct3DGymWrapper(gym.Env):
         self.reconstruction_policy = reconstruction_policy
 
         # Define observation space as Dict
-        self.observation_space = spaces.Dict(
-            {
-                "camera_pose": spaces.Box(
-                    low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
-                ),
-                "reconstruction_render": spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(1, *self.render_resolution),
-                    dtype=np.float32,  # TODO: Correct? Why extra dimension of size 1?
-                ),
-            }
+        obs_space_dict = {}
+
+        obs_space_dict["camera_pose"] = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
         )
+        obs_space_dict["mesh_render"] = spaces.Box(
+            low=0.0,
+            high=1.0,
+            shape=(1, *self.render_resolution),
+            dtype=np.float32,
+        )
+        obs_space_dict["sdf_grid"] = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(1, sdf_gt_size, sdf_gt_size, sdf_gt_size),
+            dtype=np.float32,
+        )
+        obs_space_dict["weight_grid"] = spaces.Box(
+            low=0.0,
+            high=np.inf,
+            shape=(1, sdf_gt_size, sdf_gt_size, sdf_gt_size),
+            dtype=np.float32,
+        )
+
+        self.observation_space = spaces.Dict(obs_space_dict)
 
         # Action space: use robot's native action space
         low, high = self.robot_env.action_spec
@@ -225,33 +241,50 @@ class Reconstruct3DGymWrapper(gym.Env):
         quat = mat2quat(extrinsic[:3, :3])
         return np.concatenate([position, quat]).astype(np.float32)
 
-    def _get_obs(self, reconstruction) -> Dict[str, np.ndarray]:
-        """Get current observation (camera pose + reconstruction render)."""
-        # Get birdview camera matrices for rendering reconstruction
-        # Pass render resolution to get intrinsic matrix scaled appropriately
-        intrinsic = get_camera_intrinsic_matrix(
-            self.robot_env.sim,
-            "birdview",
-            self.render_resolution[0],
-            self.render_resolution[1],
-        )
-        extrinsic = get_camera_extrinsic_matrix(self.robot_env.sim, "birdview")
+    def _get_obs(
+        self, mesh=None, sdf_grid=None, weight_grid=None
+    ) -> Dict[str, np.ndarray]:
+        """Get current observation (camera pose + reconstruction render + optional SDF/weights).
 
-        # Render current reconstruction from birdview (grayscale for feature extraction)
-        vertices, faces = reconstruction
-        render = render_mesh(
-            vertices,
-            faces,
-            extrinsic,
-            intrinsic,
-            self.render_resolution,
-            grayscale=True,
-        )
+        Args:
+            reconstruction: Tuple of (vertices, faces) for mesh rendering
+            sdf_reconstruction: Optional tuple of (sdf_grid, weight_grid) for SDF observations
+        """
+        obs = {"camera_pose": self._get_camera_pose()}
 
-        return {
-            "camera_pose": self._get_camera_pose(),
-            "reconstruction_render": render[np.newaxis, :, :].astype(np.float32),
-        }
+        if mesh is not None:
+            # Get birdview camera matrices for rendering reconstruction
+            # Pass render resolution to get intrinsic matrix scaled appropriately
+            intrinsic = get_camera_intrinsic_matrix(
+                self.robot_env.sim,
+                "birdview",
+                self.render_resolution[0],
+                self.render_resolution[1],
+            )
+            extrinsic = get_camera_extrinsic_matrix(self.robot_env.sim, "birdview")
+
+            # Render current reconstruction from birdview (grayscale for feature extraction)
+            vertices, faces = mesh
+            render = render_mesh(
+                vertices,
+                faces,
+                extrinsic,
+                intrinsic,
+                self.render_resolution,
+                grayscale=True,
+            )
+            obs["mesh_render"] = render[np.newaxis, :, :].astype(np.float32)
+
+        if sdf_grid is not None:
+            obs["sdf_grid"] = sdf_grid.reshape(
+                1, self.sdf_gt_size, self.sdf_gt_size, self.sdf_gt_size
+            ).astype(np.float32)
+        if weight_grid is not None:
+            obs["weight_grid"] = weight_grid.reshape(
+                1, self.sdf_gt_size, self.sdf_gt_size, self.sdf_gt_size
+            ).astype(np.float32)
+
+        return obs
 
     def step(
         self, action: np.ndarray
@@ -279,9 +312,11 @@ class Reconstruct3DGymWrapper(gym.Env):
                 print(
                     f"[WARNING] Depth map has {n_nan} NaN values and {n_invalid} out-of-range values at step {self._step_count}"
                 )
-                depth_image = np.nan_to_num(depth_image, nan=1.0, posinf=1.0, neginf=0.0)
+                depth_image = np.nan_to_num(
+                    depth_image, nan=1.0, posinf=1.0, neginf=0.0
+                )
                 depth_image = np.clip(depth_image, 0.0, 1.0)
-            
+
             depth_image = get_real_depth_map(self.robot_env.sim, depth_image)
 
         # Get camera intrinsics and extrinsics
@@ -305,31 +340,39 @@ class Reconstruct3DGymWrapper(gym.Env):
         if self.collect_timing:
             self.timing_stats.obs_integration_total += time.perf_counter() - t0
 
+        # Get required reconstructions
         t0 = time.perf_counter()
-        # Always get mesh reconstruction for observation/rendering
-        mesh_reconstruction = self.reconstruction_policy.reconstruct(type="mesh")
+        if (
+            self.reconstruction_metric == "chamfer_distance"
+            or self.eval_mode
+            or "mesh_render" in self.observation_space.spaces
+        ):
+            mesh_reconstruction = self.reconstruction_policy.reconstruct(type="mesh")
 
-        # Get appropriate reconstruction for reward computation based on metric
-        if self.reconstruction_metric == "voxelwise_tsdf_error":
-            # For dense TSDF-based metrics, get SDF grid for reward computation
-            reward_reconstruction = self.reconstruction_policy.reconstruct(
+        if (
+            self.reconstruction_metric == "voxelwise_tsdf_error"
+            or "sdf_grid" in self.observation_space.spaces
+            or "weight_grid" in self.observation_space.spaces
+        ):
+            tsdf_reconstruction = self.reconstruction_policy.reconstruct(
                 type="tsdf",
-                sdf_size=self.robot_env.sdf_size,
+                sdf_size=self.sdf_gt_size,
                 sdf_bbox_center=self.robot_env.sdf_bbox_center,
                 sdf_bbox_size=self.robot_env.sdf_bbox_size,
             )
-        elif self.reconstruction_metric == "chamfer_distance":
-            reward_reconstruction = mesh_reconstruction
-        else:
-            raise ValueError(
-                f"Unknown reconstruction metric: {self.reconstruction_metric}"
-            )
-
         if self.collect_timing:
             self.timing_stats.reconstruction_total += time.perf_counter() - t0
 
         # Compute reward based on reconstruction quality
         t0 = time.perf_counter()
+        if self.reconstruction_metric == "chamfer_distance":
+            reward_reconstruction = mesh_reconstruction
+        elif self.reconstruction_metric == "voxelwise_tsdf_error":
+            reward_reconstruction = tsdf_reconstruction
+        else:
+            raise ValueError(
+                f"Unknown reconstruction metric: {self.reconstruction_metric}"
+            )
         reward, reward_info_dict = self.robot_env.reward(
             action=action,
             reconstruction=reward_reconstruction,
@@ -348,17 +391,36 @@ class Reconstruct3DGymWrapper(gym.Env):
             self._save_eval_data(
                 reward_info_dict=reward_info_dict,
                 obs_dict=obs_dict,
-                reconstruction=mesh_reconstruction,
-                sdf_reconstruction=reward_reconstruction[0] if self.reconstruction_metric == "voxelwise_tsdf_error" else None,
+                mesh_reconstruction=mesh_reconstruction,
+                sdf_reconstruction=(
+                    tsdf_reconstruction[0]
+                    if "tsdf_reconstruction" in locals()
+                    else None
+                ),
             )
 
-        obs = self._get_obs(reconstruction=mesh_reconstruction)
-        # TODO: include tsdf/weights as obs
+        obs = self._get_obs(
+            mesh=(
+                mesh_reconstruction
+                if "mesh_render" in self.observation_space.spaces
+                else None
+            ),
+            sdf_grid=(
+                tsdf_reconstruction[0]
+                if "sdf_grid" in self.observation_space.spaces
+                else None
+            ),
+            weight_grid=(
+                tsdf_reconstruction[1]
+                if "weight_grid" in self.observation_space.spaces
+                else None
+            ),
+        )
 
         # Add detailed error metrics to info which is now called reward_info_dict
-        info.update(reward_info_dict)   
+        info.update(reward_info_dict)
         self._step_count += 1
-        
+
         return obs, reward, done, self._step_count >= self.robot_env.horizon, info
 
     def reset(
@@ -400,10 +462,30 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         return (
             self._get_obs(
-                reconstruction=(
-                    np.zeros((0, 3), dtype=np.float32),
-                    np.zeros((0, 3), dtype=np.int32),
-                )
+                mesh=(
+                    (
+                        np.zeros((0, 3), dtype=np.float32),
+                        np.zeros((0, 3), dtype=np.int32),
+                    )
+                    if "mesh_render" in self.observation_space.spaces
+                    else None
+                ),
+                sdf_grid=(
+                    np.zeros(
+                        (1, self.sdf_gt_size, self.sdf_gt_size, self.sdf_gt_size),
+                        dtype=np.float32,
+                    )
+                    if "sdf_grid" in self.observation_space.spaces
+                    else None
+                ),
+                weight_grid=(
+                    np.zeros(
+                        (1, self.sdf_gt_size, self.sdf_gt_size, self.sdf_gt_size),
+                        dtype=np.float32,
+                    )
+                    if "weight_grid" in self.observation_space.spaces
+                    else None
+                ),
             ),
             {},
         )
@@ -420,7 +502,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         self,
         reward_info_dict,
         obs_dict,
-        reconstruction,
+        mesh_reconstruction,
         sdf_reconstruction=None,
     ):
         """Save buffered evaluation data at end of episode."""
@@ -463,8 +545,8 @@ class Reconstruct3DGymWrapper(gym.Env):
             )
 
             rendered_reconstruction = render_mesh(
-                reconstruction[0],
-                reconstruction[1],
+                mesh_reconstruction[0],
+                mesh_reconstruction[1],
                 extrinsic,
                 intrinsic,
                 resolution=self.render_resolution,
@@ -495,13 +577,17 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Save SDF voxel plots if provided
         if sdf_reconstruction is not None:
             self._plot_sdf_voxels(
-                sdf_reconstruction, episode_dir / f"step_{self._step_count:03d}_tsdf_reconstruction.png", self.reconstruction_policy.sdf_trunc
+                sdf_reconstruction,
+                episode_dir / f"step_{self._step_count:03d}_tsdf_reconstruction.png",
+                self.reconstruction_policy.sdf_trunc,
             )
-        
+
         if self._step_count == 0:
             if self.robot_env.sdf_grid is not None:
                 self._plot_sdf_voxels(
-                    self.robot_env.sdf_grid, episode_dir / f"tsdf_gt.png", self.reconstruction_policy.sdf_trunc
+                    self.robot_env.sdf_grid,
+                    episode_dir / f"tsdf_gt.png",
+                    self.reconstruction_policy.sdf_trunc,
                 )
 
     def _plot_sdf_voxels(self, sdf_grid, save_path, threshold):
