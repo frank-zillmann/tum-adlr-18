@@ -43,14 +43,15 @@ def make_env(
                 bbox_min=np.array([-0.5, -0.5, 0.5]),
                 bbox_max=np.array([0.5, 0.5, 1.5]),
                 voxel_size=0.01,
-                sdf_trunc=0.5,
+                sdf_trunc=0.04,
             )
         elif config.reconstruction_policy == "nvblox":
             from src.reconstruction_policies.nvblox_reconstruction_policy import (
                 NvbloxReconstructionPolicy,
             )
 
-            reconstruction_policy = NvbloxReconstructionPolicy()
+            reconstruction_policy = NvbloxReconstructionPolicy(voxel_size=0.01, sdf_trunc=0.04, depth_max=1.0)
+
         else:
             raise ValueError(
                 f"Unknown reconstruction policy: {config.reconstruction_policy}"

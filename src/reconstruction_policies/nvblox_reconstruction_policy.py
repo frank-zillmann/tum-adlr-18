@@ -16,7 +16,7 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
     Simple reconstruction policy using nvblox_torch for TSDF and mesh extraction.
     """
 
-    def __init__(self, voxel_size=0.02, sdf_trunc=0.08, depth_max=1.0, **kwargs):
+    def __init__(self, voxel_size=0.01, sdf_trunc=0.04, depth_max=1.0, **kwargs):
         super().__init__(**kwargs)
         self.voxel_size = voxel_size
         self.sdf_trunc = sdf_trunc

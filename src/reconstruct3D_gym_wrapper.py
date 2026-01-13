@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import gymnasium as gym
 from gymnasium import spaces
 
@@ -45,7 +46,7 @@ class TimingStats:
             return "No timing data collected"
 
         step_total = (
-            self.simulation_total + self.reconstruction_total + self.reward_total
+            self.simulation_total + self.obs_integration_total + self.reconstruction_total + self.reward_total
         )
         avg_step = step_total / self.n_steps * 1000  # ms
 
@@ -167,7 +168,7 @@ class Reconstruct3DGymWrapper(gym.Env):
                 "robot0_eye_in_hand",
                 "birdview",
                 "frontview",
-                "sideview",
+                # "sideview",
             ]
         else:
             self.camera_names = ["robot0_eye_in_hand", "birdview"]
@@ -256,8 +257,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         self, action: np.ndarray
     ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
         """Execute action and return (obs, reward, terminated, truncated, info)."""
-        self._step_count += 1
-        
+
         # Step robot environment (physics + rendering)
         t0 = time.perf_counter()
         obs_dict, _, done, info = self.robot_env.step(action)
@@ -349,14 +349,16 @@ class Reconstruct3DGymWrapper(gym.Env):
                 reward_info_dict=reward_info_dict,
                 obs_dict=obs_dict,
                 reconstruction=mesh_reconstruction,
+                sdf_reconstruction=reward_reconstruction[0] if self.reconstruction_metric == "voxelwise_tsdf_error" else None,
             )
 
         obs = self._get_obs(reconstruction=mesh_reconstruction)
         # TODO: include tsdf/weights as obs
 
         # Add detailed error metrics to info which is now called reward_info_dict
-        info.update(reward_info_dict)
-
+        info.update(reward_info_dict)   
+        self._step_count += 1
+        
         return obs, reward, done, self._step_count >= self.robot_env.horizon, info
 
     def reset(
@@ -414,7 +416,13 @@ class Reconstruct3DGymWrapper(gym.Env):
         """Render current camera view."""
         return self.robot_env.render()
 
-    def _save_eval_data(self, reward_info_dict, obs_dict, reconstruction):
+    def _save_eval_data(
+        self,
+        reward_info_dict,
+        obs_dict,
+        reconstruction,
+        sdf_reconstruction=None,
+    ):
         """Save buffered evaluation data at end of episode."""
         episode_dir = self.eval_log_dir / f"episode_{self._episode_count:04d}"
         episode_dir.mkdir(parents=True, exist_ok=True)
@@ -465,23 +473,69 @@ class Reconstruct3DGymWrapper(gym.Env):
 
             plt.imsave(
                 episode_dir
-                / f"step_{self._step_count:03d}_{camera_name}_reconstruction.png",
+                / f"step_{self._step_count:03d}_{camera_name}_mesh_reconstruction.png",
                 rendered_reconstruction,
             )
 
-            rendered_gt = render_mesh(
-                self.robot_env.static_env_vertices,
-                self.robot_env.static_env_faces,
-                extrinsic,
-                intrinsic,
-                resolution=self.render_resolution,
-                grayscale=False,
-            )
+            if self._step_count == 0:
+                rendered_gt = render_mesh(
+                    self.robot_env.static_env_vertices,
+                    self.robot_env.static_env_faces,
+                    extrinsic,
+                    intrinsic,
+                    resolution=self.render_resolution,
+                    grayscale=False,
+                )
 
-            plt.imsave(
-                episode_dir / f"step_{self._step_count:03d}_{camera_name}_gt.png",
-                rendered_gt,
+                plt.imsave(
+                    episode_dir / f"{camera_name}_mesh_gt.png",
+                    rendered_gt,
+                )
+
+        # Save SDF voxel plots if provided
+        if sdf_reconstruction is not None:
+            self._plot_sdf_voxels(
+                sdf_reconstruction, episode_dir / f"step_{self._step_count:03d}_tsdf_reconstruction.png", self.reconstruction_policy.sdf_trunc
             )
+        
+        if self._step_count == 0:
+            if self.robot_env.sdf_grid is not None:
+                self._plot_sdf_voxels(
+                    self.robot_env.sdf_grid, episode_dir / f"tsdf_gt.png", self.reconstruction_policy.sdf_trunc
+                )
+
+    def _plot_sdf_voxels(self, sdf_grid, save_path, threshold):
+        """Plot observed voxels from SDF grid using scatter plot for speed."""
+        # Identify observed voxels
+        mask = np.abs(sdf_grid) < threshold
+
+        if not np.any(mask):
+            return  # Nothing to plot
+
+        # Get voxel indices where mask is True
+        x_idx, y_idx, z_idx = np.where(mask)
+
+        # Flip x-axis to match robosuite's coordinate system
+        x_idx = sdf_grid.shape[2] - 1 - x_idx
+
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, projection="3d")
+
+        # Use scatter plot instead of voxels - much faster
+        ax.scatter(x_idx, y_idx, z_idx, c="blue", marker="o", s=10, alpha=0.6)
+
+        # Set axis limits to full grid size
+        ax.set_xlim(0, sdf_grid.shape[2])
+        ax.set_ylim(0, sdf_grid.shape[1])
+        ax.set_zlim(0, sdf_grid.shape[0])
+
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+
+        plt.title("Observed SDF Voxels with |SDF| < {:.3f} m".format(threshold))
+        plt.savefig(save_path, dpi=100)
+        plt.close(fig)
 
     def close(self):
         """Clean up resources."""

@@ -30,7 +30,7 @@ class Open3DTSDFGenerator(BaseReconstructionPolicy):
 
     def __init__(
         self,
-        bbox_min: np.ndarray,
+        bbox_min: np.ndarray, # TODO: as arguments for methods using them, not as class members
         bbox_max: np.ndarray,
         voxel_size: float,
         sdf_trunc: float,
