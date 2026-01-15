@@ -14,7 +14,40 @@ cd tum-adlr-18
 source ./install/setup.sh
 ```
 
-### Known issues and fixes:
+## Usage
+### Training
+To train a model, use the provided training script with a configuration file. The current available configurations are:
+```bash
+# Train using nvblox and voxel-wise TSDF error
+python scripts/train.py --config configs/nvblox_voxelwise_tsdf_error.yaml
+
+# Train using nvblox and Chamfer distance
+python scripts/train.py --config configs/nvblox_chamfer_distance.yaml
+
+# Train using Open3D and Chamfer distance
+python scripts/train.py --config configs/open3d_chamfer_distance.yaml
+```
+
+You can also pass multiple configuration files to use debug or demo mode (in case of conflicting parameters, the last config file would take precedence) and provide a checkpoint to resume training:
+```bash
+# Minimal run for debugging
+python scripts/train.py --config configs/nvblox_voxelwise_tsdf_error.yaml configs/debug.yaml
+
+# Minimal run with increased resolution for demo purposes
+python scripts/train.py --config configs/open3d_chamfer_distance.yaml configs/debug.yaml configs/demo.yaml
+
+# Resume training from a checkpoint
+python scripts/train.py --config configs/nvblox_voxelwise_tsdf_error.yaml --checkpoint path/to/checkpoint.zip
+```
+
+### Create episode videos
+To create videos of trained episodes, use the `create_episode_video.py` script:
+```bash
+python scripts/create_episode_videos.py path/to/eval_data/episode_xxxx
+```
+You can modify the script to change the camera views and frame rate.
+
+## Known issues and fixes:
 I used a CPU-only laptop and a Google Cloud VM with NVIDIA T4 GPU and `pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570` image. The following fixes were necessary on the VM.
 
 **1. OpenCV/libGL error** (`libGL.so.1: cannot open shared object file`):
@@ -72,7 +105,6 @@ IMAGE_CONVENTION = "opencv"  # Options are {"opengl", "opencv"}
 
 No fix found yet. Workaround: Restart training from last checkpoint.
 
-## Usage
-
-### Testing
-
+TODO: faulthandler stack trace
+    check RAM increase
+hard coded policy
