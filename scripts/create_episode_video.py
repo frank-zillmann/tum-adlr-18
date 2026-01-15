@@ -190,7 +190,8 @@ def create_video(
     print(f"  Video Size:   {width}x{height}")
 
     # Initialize video writer
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    # Use "avc1" (H.264) for better browser/VS Code compatibility than "mp4v"
+    fourcc = cv2.VideoWriter_fourcc(*"avc1")
     out = cv2.VideoWriter(output_path, fourcc, FPS, (width, height))
 
     # Write frames

@@ -1,9 +1,9 @@
 # tum-adlr-18
 **Frank Zillmann's Advanced Deep Learning for Robotics Project: Efficient Environment Exploration and 3D Reconstruction with Reinforcement Learning and Multiple View Geometry**
 
-![Environment Screenshot](.github/assets/step_001_frontview_image.png)
+<!-- ![Environment Screenshot](.github/assets/step_001_frontview_image.png) -->
 
-![Intermediate rollout video after 60000 steps, showing TCP camera depth, frontview camera RGB, birdview reconstruction rendering, and birdview ground truth rendering.](.github/assets/episode_video_35_60000_steps.mp4)
+![Rollout of untrained policy, showing TCP camera depth, frontview camera RGB, birdview reconstruction rendering, and birdview ground truth rendering.](.github/assets/episode_video_untrained_debug.mp4)
 
 ## Installation
 
