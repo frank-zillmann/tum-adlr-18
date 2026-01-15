@@ -3,7 +3,9 @@
 
 <!-- ![Environment Screenshot](.github/assets/step_001_frontview_image.png) -->
 
-![Rollout of untrained policy, showing TCP camera depth, frontview camera RGB, birdview reconstruction rendering, and birdview ground truth rendering.](.github/assets/episode_video_untrained_debug.mp4)
+
+Rollout of untrained policy, showing TCP camera depth, frontview camera RGB, birdview reconstruction rendering, and birdview ground truth rendering:
+![Rollout of untrained policy, showing TCP camera depth, frontview camera RGB, birdview reconstruction rendering, and birdview ground truth rendering.](.github/assets/episode_video_untrained_debug.gif)
 
 ## Installation
 
