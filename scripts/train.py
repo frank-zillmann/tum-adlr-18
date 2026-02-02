@@ -14,76 +14,21 @@ from stable_baselines3.common.callbacks import (
     CallbackList,
     BaseCallback,
 )
-from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
-from src.reconstruct3D_gym_wrapper import Reconstruct3DGymWrapper
 from src.robot_policies import (
     CameraPoseExtractor,
     MeshRenderingExtractor,
     WeightGridExtractor,
     CombinedExtractor,
 )
+from src.utils.env_factory import make_env_fn
 from configs.train_config import TrainConfig
 
 
-def make_env(
-    config: TrainConfig,
-    seed: int,
-    collect_timing: bool = False,
-    eval_log_dir=None,
-):
+import faulthandler
 
-    def _init():
-        # Select reconstruction policy
-        if config.reconstruction_policy == "open3d":
-            from src.reconstruction_policies.open3d_TSDF_generator import (
-                Open3DTSDFGenerator,
-            )
-
-            reconstruction_policy = Open3DTSDFGenerator(
-                voxel_size=0.01,
-                sdf_trunc=0.04,
-                depth_max=1.0,
-            )
-
-        elif config.reconstruction_policy == "nvblox":
-            from src.reconstruction_policies.nvblox_reconstruction_policy import (
-                NvbloxReconstructionPolicy,
-            )
-
-            reconstruction_policy = NvbloxReconstructionPolicy(
-                voxel_size=0.01, sdf_trunc=0.04, depth_max=1.0
-            )
-
-        else:
-            raise ValueError(
-                f"Unknown reconstruction policy: {config.reconstruction_policy}"
-            )
-
-        env = Reconstruct3DGymWrapper(
-            reconstruction_policy=reconstruction_policy,
-            reconstruction_metric=config.reconstruction_metric,
-            observations=config.observations,
-            horizon=config.horizon,
-            control_freq=config.control_freq,
-            camera_height=config.camera_height,
-            camera_width=config.camera_width,
-            render_height=config.render_height,
-            render_width=config.render_width,
-            collect_timing=collect_timing,
-            sdf_gt_size=config.sdf_gt_size,
-            bbox_padding=config.bbox_padding,
-            reward_scale=config.reward_scale,
-            characteristic_error=config.characteristic_error,
-            action_penalty_scale=config.action_penalty_scale,
-            eval_log_dir=eval_log_dir,
-        )
-        env = Monitor(env)
-        env.reset(seed=seed)
-        return env
-
-    return _init
+faulthandler.enable()  # Enable faulthandler to trace segfaults
 
 
 class TimingCallback(BaseCallback):
@@ -175,7 +120,7 @@ def train(config: TrainConfig, checkpoint: str = None):
     # Create environments (with timing collection if benchmark enabled)
     # Note: timing only works with DummyVecEnv (n_envs=1), not SubprocVecEnv
     collect_timing = config.benchmark and config.n_envs == 1
-    env_fn = lambda i: make_env(config, seed=i, collect_timing=collect_timing)
+    env_fn = lambda i: make_env_fn(config, seed=i, collect_timing=collect_timing)
     train_env = (
         SubprocVecEnv([env_fn(i) for i in range(config.n_envs)])
         if config.n_envs > 1
@@ -183,7 +128,7 @@ def train(config: TrainConfig, checkpoint: str = None):
     )
     # Eval env logs images and rewards to log_dir/eval_data/
     eval_log_dir = log_dir / "eval_data"
-    eval_env = DummyVecEnv([make_env(config, seed=42, eval_log_dir=eval_log_dir)])
+    eval_env = DummyVecEnv([make_env_fn(config, seed=42, eval_log_dir=eval_log_dir)])
 
     # Build extractors config based on configured observations
     extractors_config = []

@@ -53,6 +53,17 @@ python scripts/create_episode_videos.py path/to/run/eval_data/episode_xxxx
 ```
 You can modify the script to change the camera views and frame rate.
 
+### Scripted Table Edge Policy
+A hard-coded baseline policy is available that moves the robot TCP along the edges of the table (at the corners ±0.3m from center, z≈1.1m), while keeping the camera pointed at the table center (z≈0.9m). This is useful for comparing against learned policies.
+
+```bash
+# Run scripted policy with Open3D reconstruction
+python scripts/eval_scripted.py --config configs/open3d_chamfer_distance.yaml --n_episodes 3
+
+# Run scripted policy in debug mode
+python scripts/eval_scripted.py --config configs/open3d_chamfer_distance.yaml configs/debug.yaml --n_episodes 1
+```
+
 ## Known issues and fixes:
 I used a CPU-only laptop and a Google Cloud VM with NVIDIA T4 GPU and `pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570` image.
 
@@ -114,3 +125,6 @@ No fix found yet. Workaround: Restart training from last checkpoint.
 TODO: 
 - faulthandler stack trace
 - check RAM increase
+
+Please find out how nvblox encodes unobserved or truncated voxels in the sdf_values.
+What happens if a query point must be interpolated between a observed and unobserved or a truncated and untruncated voxel?

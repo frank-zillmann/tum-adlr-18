@@ -96,9 +96,9 @@ class Reconstruct3DGymWrapper(gym.Env):
 
     Action:
         - Uses OSC_POSE controller (Operational Space Control)
-        - 7D: position delta (3) + axis-angle rotation delta (3) + gripper (1)
+        - 6D: position delta (3) + axis-angle rotation delta (3)
         - Deltas are in robot base frame, scaled from [-1,1] to physical limits
-        - Position: ±5cm, Rotation: ±0.5rad per step
+        - Position: ±10cm, Rotation: ±0.5rad per step
 
     Reward: reconstruction quality (chamfer distance or SDF error)
     """
