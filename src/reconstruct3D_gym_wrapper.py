@@ -228,6 +228,12 @@ class Reconstruct3DGymWrapper(gym.Env):
                 shape=(1, sdf_gt_size, sdf_gt_size, sdf_gt_size),
                 dtype=np.float32,
             )
+
+        # Also include rotation matrix for convenience (derived from extrinsic)
+        obs_space_dict["camera_rotation_matrix"] = spaces.Box(
+            low=-1.0, high=1.0, shape=(3, 3), dtype=np.float32
+        )
+
         print(f"Observation space keys: {list(obs_space_dict.keys())}")
         self.observation_space = spaces.Dict(obs_space_dict)
 
@@ -243,11 +249,15 @@ class Reconstruct3DGymWrapper(gym.Env):
             self.robot_env.sim, "robot0_eye_in_hand"
         )
         position = extrinsic[:3, 3]
+        rotation_matrix = extrinsic[:3, :3]
+
         # Convert rotation matrix to quaternion (wxyz format)
         from robosuite.utils.transform_utils import mat2quat
 
-        quat = mat2quat(extrinsic[:3, :3])
-        return np.concatenate([position, quat]).astype(np.float32)
+        quat = mat2quat(rotation_matrix)
+
+        pose_7d = np.concatenate([position, quat]).astype(np.float32)
+        return pose_7d
 
     def _get_obs(
         self, mesh=None, sdf_grid=None, weight_grid=None
@@ -258,7 +268,16 @@ class Reconstruct3DGymWrapper(gym.Env):
             reconstruction: Tuple of (vertices, faces) for mesh rendering
             sdf_reconstruction: Optional tuple of (sdf_grid, weight_grid) for SDF observations
         """
-        obs = {"camera_pose": self._get_camera_pose()}
+        obs = {}
+
+        # Always include camera rotation matrix derived from extrinsic for convenience
+        obs["camera_rotation_matrix"] = get_camera_extrinsic_matrix(
+            self.robot_env.sim, "robot0_eye_in_hand"
+        )[:3, :3].astype(np.float32)
+
+        if "camera_pose" in self.observation_space.spaces:
+            camera_pose = self._get_camera_pose()
+            obs["camera_pose"] = camera_pose
 
         if mesh is not None:
             # Get birdview camera matrices for rendering reconstruction
