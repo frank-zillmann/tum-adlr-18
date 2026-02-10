@@ -26,9 +26,10 @@ class TableEdgePolicy:
 
     def __init__(
         self,
+        horizon: int,
         table_center: Tuple[float, float, float] = (0.0, 0.0, 0.9),
         tcp_height: float = 1.1,
-        corner_offset: float = 0.3,
+        corner_offset: float = 0.4,
         position_gain: float = 1.0,  # Normalized action gain
         orientation_gain: float = 0.5,  # Normalized action gain
     ):
@@ -47,11 +48,19 @@ class TableEdgePolicy:
         self.corner_offset = corner_offset
         self.position_gain = position_gain
         self.orientation_gain = orientation_gain
+        self.horizon = horizon
+
+        self._step_count = 0
+
+        # Physical limits (for computing normalized actions)
+        # OSC_POSE controller scales [-1, 1] to these limits
+        self.pos_output_max = 0.10  # meters
+        self.rot_output_max = 0.5  # radians
 
         # Define waypoints (corners at TCP height, centered on table)
         # Moving counter-clockwise when viewed from above
         cx, cy = table_center[0], table_center[1]
-        self.waypoints = np.array(
+        self.cornerpoints = np.array(
             [
                 [cx + corner_offset, cy + corner_offset, tcp_height],
                 [cx - corner_offset, cy + corner_offset, tcp_height],
@@ -60,17 +69,34 @@ class TableEdgePolicy:
             ]
         )
 
-        self.current_waypoint_idx = 0
-        self.waypoint_threshold = 0.05  # Distance to consider waypoint reached
+    def _get_current_waypoint(self, step_count: int) -> np.ndarray:
+        """Get the current target waypoint via smooth linear interpolation.
 
-        # Physical limits (for computing normalized actions)
-        # OSC_POSE controller scales [-1, 1] to these limits
-        self.pos_output_max = 0.10  # meters
-        self.rot_output_max = 0.5  # radians
+        Interpolates along the 4 corners in one complete loop as step_count
+        goes from 0 to horizon.
+        """
+        # Fraction of episode completed [0, 1]
+        frac = step_count / self.horizon
+        frac = np.clip(frac, 0.0, 1.0 - 1e-8)  # Avoid edge case at exactly 1.0
+
+        n_cornerpoints = len(self.cornerpoints)
+        # Map to segment (0-3) and interpolation parameter t within segment
+        segment_frac = frac * n_cornerpoints  # Scale to [0, n_cornerpoints)
+        segment_idx = int(segment_frac)  # Which segment (0, 1, 2, ...)
+        t = segment_frac - segment_idx  # Interpolation param within segment [0, 1)
+
+        # Get start and end corners for this segment
+        corner_start = self.cornerpoints[segment_idx]
+        corner_end = self.cornerpoints[
+            (segment_idx + 1) % n_cornerpoints
+        ]  # Wrap around to first corner
+
+        # Linear interpolation
+        return corner_start + t * (corner_end - corner_start)
 
     def reset(self):
         """Reset policy state."""
-        self.current_waypoint_idx = 0
+        self._step_count = 0
 
     def _get_current_position(self, observation: Dict[str, np.ndarray]) -> np.ndarray:
         """Extract current TCP position from observation."""
@@ -83,11 +109,13 @@ class TableEdgePolicy:
     def _get_current_orientation(
         self, observation: Dict[str, np.ndarray]
     ) -> np.ndarray:
-        """Extract current TCP orientation quaternion from observation."""
-        camera_pose = observation.get("camera_pose")
-        if camera_pose is None:
-            raise ValueError("TableEdgePolicy requires 'camera_pose' in observations")
-        return camera_pose[3:7]  # wxyz quaternion
+        """Extract current TCP rotation matrix from observation."""
+        rotation_matrix = observation.get("camera_rotation_matrix")
+        if rotation_matrix is None:
+            raise ValueError(
+                "TableEdgePolicy requires 'camera_rotation_matrix' in observations"
+            )
+        return rotation_matrix
 
     def _compute_look_at_rotation(self, current_pos: np.ndarray) -> np.ndarray:
         """
@@ -150,23 +178,6 @@ class TableEdgePolicy:
 
         return axis * theta
 
-    def _quat_to_rotation_matrix(self, quat_wxyz: np.ndarray) -> np.ndarray:
-        """Convert quaternion (w, x, y, z) to rotation matrix."""
-        w, x, y, z = quat_wxyz
-
-        # Normalize quaternion
-        norm = np.sqrt(w * w + x * x + y * y + z * z)
-        w, x, y, z = w / norm, x / norm, y / norm, z / norm
-
-        R = np.array(
-            [
-                [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-                [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-            ]
-        )
-        return R
-
     def predict(
         self,
         observation: Dict[str, np.ndarray],
@@ -207,20 +218,13 @@ class TableEdgePolicy:
 
         # Get current position and orientation
         current_pos = self._get_current_position(observation)
-        current_quat = self._get_current_orientation(observation)
-        current_R = self._quat_to_rotation_matrix(current_quat)
+        current_R = self._get_current_orientation(observation)
 
-        # Get target waypoint
-        target_pos = self.waypoints[self.current_waypoint_idx]
+        # Get target waypoint via smooth interpolation
+        target_pos = self._get_current_waypoint(self._step_count)
 
-        # Check if we've reached the current waypoint
-        distance_to_target = np.linalg.norm(current_pos - target_pos)
-        if distance_to_target < self.waypoint_threshold:
-            # Move to next waypoint
-            self.current_waypoint_idx = (self.current_waypoint_idx + 1) % len(
-                self.waypoints
-            )
-            target_pos = self.waypoints[self.current_waypoint_idx]
+        # Increment step count for next call
+        self._step_count += 1
 
         # Compute position delta (proportional control)
         pos_error = target_pos - current_pos

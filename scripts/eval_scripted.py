@@ -25,7 +25,7 @@ def evaluate_scripted(config: TrainConfig, n_episodes: int = 1):
     env = create_env(config, seed=42, collect_timing=True, eval_log_dir=eval_log_dir)
 
     # Create scripted policy (uses default table geometry)
-    policy = TableEdgePolicy()
+    policy = TableEdgePolicy(horizon=config.horizon)
 
     print(f"Evaluating scripted table edge policy")
     print(f"Logging to: {log_dir}")
