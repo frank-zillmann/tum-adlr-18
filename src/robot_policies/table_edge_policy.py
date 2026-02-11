@@ -28,10 +28,7 @@ class TableEdgePolicy:
         self,
         horizon: int,
         table_center: Tuple[float, float, float] = (0.0, 0.0, 0.9),
-        tcp_height: float = 1.1,
-        corner_offset: float = 0.4,
-        position_gain: float = 1.0,  # Normalized action gain
-        orientation_gain: float = 0.5,  # Normalized action gain
+        tcp_height: float = 1.3,
     ):
         """
         Initialize the table edge policy.
@@ -45,9 +42,6 @@ class TableEdgePolicy:
         """
         self.table_center = np.array(table_center)
         self.tcp_height = tcp_height
-        self.corner_offset = corner_offset
-        self.position_gain = position_gain
-        self.orientation_gain = orientation_gain
         self.horizon = horizon
 
         self._step_count = 0
@@ -60,12 +54,13 @@ class TableEdgePolicy:
         # Define waypoints (corners at TCP height, centered on table)
         # Moving counter-clockwise when viewed from above
         cx, cy = table_center[0], table_center[1]
+
         self.cornerpoints = np.array(
             [
-                [cx + corner_offset, cy + corner_offset, tcp_height],
-                [cx - corner_offset, cy + corner_offset, tcp_height],
-                [cx - corner_offset, cy - corner_offset, tcp_height],
-                [cx + corner_offset, cy - corner_offset, tcp_height],
+                [-0.5, 0.0, tcp_height],
+                [-0.2, -0.3, tcp_height],
+                [0.0, 0.0, tcp_height],
+                [-0.2, +0.3, tcp_height],
             ]
         )
 
@@ -97,25 +92,6 @@ class TableEdgePolicy:
     def reset(self):
         """Reset policy state."""
         self._step_count = 0
-
-    def _get_current_position(self, observation: Dict[str, np.ndarray]) -> np.ndarray:
-        """Extract current TCP position from observation."""
-        # camera_pose is (7,): position (3) + quaternion wxyz (4)
-        camera_pose = observation.get("camera_pose")
-        if camera_pose is None:
-            raise ValueError("TableEdgePolicy requires 'camera_pose' in observations")
-        return camera_pose[:3]
-
-    def _get_current_orientation(
-        self, observation: Dict[str, np.ndarray]
-    ) -> np.ndarray:
-        """Extract current TCP rotation matrix from observation."""
-        rotation_matrix = observation.get("camera_rotation_matrix")
-        if rotation_matrix is None:
-            raise ValueError(
-                "TableEdgePolicy requires 'camera_rotation_matrix' in observations"
-            )
-        return rotation_matrix
 
     def _compute_look_at_rotation(self, current_pos: np.ndarray) -> np.ndarray:
         """
@@ -207,31 +183,17 @@ class TableEdgePolicy:
         ):
             self.reset()
 
-        # Handle vectorized observations (batch dimension)
-        is_batched = False
-        if isinstance(observation, dict):
-            first_value = next(iter(observation.values()))
-            if first_value.ndim > 1:
-                is_batched = True
-                # Extract single observation for processing
-                observation = {k: v[0] for k, v in observation.items()}
-
         # Get current position and orientation
-        current_pos = self._get_current_position(observation)
-        current_R = self._get_current_orientation(observation)
+        current_pos = observation["camera_pose"][:3]  # (x, y, z)
+        current_R = observation["camera_rotation_matrix"]  # (3, 3)
 
         # Get target waypoint via smooth interpolation
         target_pos = self._get_current_waypoint(self._step_count)
-
-        # Increment step count for next call
         self._step_count += 1
 
-        # Compute position delta (proportional control)
         pos_error = target_pos - current_pos
-        pos_delta = self.position_gain * pos_error
-
-        # Normalize to [-1, 1] action space (controller scales by pos_output_max)
-        pos_action = pos_delta / self.pos_output_max
+        # Normalize to [-1, 1] action space
+        pos_action = pos_error / self.pos_output_max
         pos_action = np.clip(pos_action, -1.0, 1.0)
 
         # Compute desired orientation (look at table center)
@@ -244,15 +206,14 @@ class TableEdgePolicy:
         rot_error_aa = self._rotation_matrix_to_axis_angle(R_error)
 
         # Apply gain and normalize to [-1, 1] action space
-        rot_delta = self.orientation_gain * rot_error_aa
-        rot_action = rot_delta / self.rot_output_max
+        rot_action = rot_error_aa / self.rot_output_max
         rot_action = np.clip(rot_action, -1.0, 1.0)
 
         # Combine into action (6D normalized: position + rotation)
         action = np.concatenate([pos_action, rot_action]).astype(np.float32)
 
-        # Handle batched output
-        if is_batched:
-            action = action[np.newaxis, :]
+        # For testing: np.array([0, 0, 0.5, 0, 0, 0]).astype(np.float64)
+
+        action[3:] = np.zeros((3))  # Zero rotation for testing
 
         return action, None

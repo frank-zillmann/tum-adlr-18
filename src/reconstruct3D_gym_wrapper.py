@@ -111,7 +111,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         reconstruction_metric: str = "chamfer_distance",
         observations: list = [],
         horizon=40,
-        control_freq=5,
+        control_freq=4,
         camera_height=128,
         camera_width=128,
         render_height=64,
