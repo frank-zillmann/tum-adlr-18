@@ -151,20 +151,20 @@ class Reconstruct3DGymWrapper(gym.Env):
         # Increase action limits for camera exploration task
         # Default: position ±0.05m, orientation ±0.5rad
         controller_config["body_parts"]["right"]["output_max"] = [
-            0.10,
-            0.10,
-            0.10,
-            0.5,
-            0.5,
-            0.5,
+            0.05,
+            0.05,
+            0.05,
+            0.25,
+            0.25,
+            0.25,
         ]
         controller_config["body_parts"]["right"]["output_min"] = [
-            -0.10,
-            -0.10,
-            -0.10,
-            -0.5,
-            -0.5,
-            -0.5,
+            -0.05,
+            -0.05,
+            -0.05,
+            -0.25,
+            -0.25,
+            -0.25,
         ]
 
         print(f"Using controller config: {controller_config}")

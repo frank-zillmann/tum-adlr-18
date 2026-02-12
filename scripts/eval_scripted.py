@@ -6,7 +6,7 @@ from datetime import datetime
 
 import numpy as np
 
-from src.robot_policies import TableEdgePolicy
+from src.robot_policies import ScriptedPolicy
 from src.utils.env_factory import create_env
 from configs.train_config import TrainConfig
 
@@ -25,7 +25,7 @@ def evaluate_scripted(config: TrainConfig, n_episodes: int = 1):
     env = create_env(config, seed=42, collect_timing=True, eval_log_dir=eval_log_dir)
 
     # Create scripted policy (uses default table geometry)
-    policy = TableEdgePolicy(horizon=config.horizon)
+    policy = ScriptedPolicy(horizon=config.horizon)
 
     print(f"Evaluating scripted table edge policy")
     print(f"Logging to: {log_dir}")

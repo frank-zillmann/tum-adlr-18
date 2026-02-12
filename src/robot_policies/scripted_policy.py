@@ -2,9 +2,10 @@
 
 import numpy as np
 from typing import Tuple, Optional, Dict, Any
+from scipy.spatial.transform import Rotation
 
 
-class TableEdgePolicy:
+class ScriptedPolicy:
     """
     A hard-coded robot policy that moves the TCP along the edges of a table
     while the camera always points toward the table center.
@@ -48,8 +49,8 @@ class TableEdgePolicy:
 
         # Physical limits (for computing normalized actions)
         # OSC_POSE controller scales [-1, 1] to these limits
-        self.pos_output_max = 0.10  # meters
-        self.rot_output_max = 0.5  # radians
+        self.pos_output_max = 0.05  # meters
+        self.rot_output_max = 0.25  # radians
 
         # Define waypoints (corners at TCP height, centered on table)
         # Moving counter-clockwise when viewed from above
@@ -93,6 +94,18 @@ class TableEdgePolicy:
         """Reset policy state."""
         self._step_count = 0
 
+    def _compute_camera_rotation(self) -> np.ndarray:
+
+        R_down = np.array(
+            [
+                [-1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, -1.0],
+            ]
+        )
+
+        return R_down
+
     def _compute_look_at_rotation(self, current_pos: np.ndarray) -> np.ndarray:
         """
         Compute axis-angle rotation to make camera look at table center.
@@ -135,18 +148,37 @@ class TableEdgePolicy:
 
     def _rotation_matrix_to_axis_angle(self, R: np.ndarray) -> np.ndarray:
         """Convert rotation matrix to axis-angle representation."""
-        # Rodrigues formula inverse
-        theta = np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))
+        eps = 1e-6
 
-        if theta < 1e-6:
+        if R.shape != (3, 3):
+            raise ValueError("Input must be a 3x3 rotation matrix")
+        if (R.T @ R - np.eye(3) > eps).any():
+            raise ValueError("Input is not a valid rotation matrix (not orthogonal)")
+        if abs(abs(np.linalg.det(R)) - 1.0) > eps:
+            raise ValueError(
+                f"Input is not a valid rotation matrix (determinant = {np.linalg.det(R)})"
+            )
+
+        trace = np.trace(R)
+        if trace > (3.0 + eps) or trace < (-1.0 - eps):
+            # Numerical issues, return zero rotation and print warning
+            print("Warning: Invalid rotation matrix with trace =", trace)
             return np.zeros(3)
 
-        if abs(theta - np.pi) < 1e-6:
+        if abs(trace - 3.0) < eps:
+            # No rotation
+            return np.zeros(3)
+
+        if abs(trace + 1.0) < eps:
             # Handle 180 degree rotation
             # Find axis from eigenvector with eigenvalue 1
             _, V = np.linalg.eig(R)
             axis = np.real(V[:, np.argmax(np.abs(np.diag(R) + 1))])
+            theta = np.pi
             return axis * theta
+
+        # Rodrigues formula inverse
+        theta = np.arccos((trace - 1.0) / 2.0)
 
         axis = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) / (
             2 * np.sin(theta)
@@ -196,24 +228,27 @@ class TableEdgePolicy:
         pos_action = pos_error / self.pos_output_max
         pos_action = np.clip(pos_action, -1.0, 1.0)
 
-        # Compute desired orientation (look at table center)
-        R_desired = self._compute_look_at_rotation(current_pos)
+        # Compute desired orientation
+        # R_desired = self._compute_look_at_rotation(current_pos)
+        R_desired = self._compute_camera_rotation()
 
-        # Compute rotation error (R_error = R_desired @ R_current.T)
-        R_error = R_desired @ current_R.T
+        # Compute rotation error
+        R_error = current_R.T @ R_desired
 
         # Convert to axis-angle
-        rot_error_aa = self._rotation_matrix_to_axis_angle(R_error)
+        r_error = self._rotation_matrix_to_axis_angle(R_error)
+        print("Rotation error (axis-angle):", r_error)
+        r_error = Rotation.from_matrix(R_error).as_rotvec()
+        print("Rotation error (scipy rotvec):", r_error)
 
         # Apply gain and normalize to [-1, 1] action space
-        rot_action = rot_error_aa / self.rot_output_max
+        rot_action = r_error / self.rot_output_max
         rot_action = np.clip(rot_action, -1.0, 1.0)
 
         # Combine into action (6D normalized: position + rotation)
         action = np.concatenate([pos_action, rot_action]).astype(np.float32)
 
         # For testing: np.array([0, 0, 0.5, 0, 0, 0]).astype(np.float64)
-
         action[3:] = np.zeros((3))  # Zero rotation for testing
 
         return action, None
