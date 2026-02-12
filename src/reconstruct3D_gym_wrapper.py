@@ -126,6 +126,7 @@ class Reconstruct3DGymWrapper(gym.Env):
     ):
         self._step_count = 0
         self._episode_count = 0
+        self.horizon = horizon
 
         self.collect_timing = collect_timing
         self.camera_resolution = (camera_height, camera_width)
@@ -136,6 +137,10 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         # Observations to include in observation space
         self.observations = observations
+
+        # Camera pose history buffer (for camera_pose_history observation)
+        self._pose_history = np.zeros((horizon, 7), dtype=np.float32)
+        self._pose_history_len = 0
 
         # Evaluation logging (only active in val mode with log_dir set)
         self.eval_log_dir = Path(eval_log_dir) if eval_log_dir else None
@@ -228,6 +233,13 @@ class Reconstruct3DGymWrapper(gym.Env):
                 shape=(1, sdf_gt_size, sdf_gt_size, sdf_gt_size),
                 dtype=np.float32,
             )
+        if "camera_pose_history" in self.observations:
+            obs_space_dict["camera_pose_history"] = spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(horizon, 7),
+                dtype=np.float32,
+            )
 
         # Also include rotation matrix for convenience (derived from extrinsic)
         obs_space_dict["camera_rotation_matrix"] = spaces.Box(
@@ -278,6 +290,9 @@ class Reconstruct3DGymWrapper(gym.Env):
         if "camera_pose" in self.observation_space.spaces:
             camera_pose = self._get_camera_pose()
             obs["camera_pose"] = camera_pose
+
+        if "camera_pose_history" in self.observation_space.spaces:
+            obs["camera_pose_history"] = self._pose_history.copy()
 
         if mesh is not None:
             # Get birdview camera matrices for rendering reconstruction
@@ -360,6 +375,13 @@ class Reconstruct3DGymWrapper(gym.Env):
         extrinsic = get_camera_extrinsic_matrix(
             self.robot_env.sim, "robot0_eye_in_hand"
         )
+
+        # Record current camera pose in history buffer
+        if "camera_pose_history" in self.observation_space.spaces:
+            pose = self._get_camera_pose()
+            if self._pose_history_len < self.horizon:
+                self._pose_history[self._pose_history_len] = pose
+                self._pose_history_len += 1
 
         # Obs integration
         self.reconstruction_policy.add_obs(
@@ -476,6 +498,13 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         self._step_count = 0
         self._episode_count += 1
+
+        # Reset camera pose history buffer and record initial pose
+        self._pose_history[:] = 0.0
+        self._pose_history_len = 0
+        if "camera_pose_history" in self.observation_space.spaces:
+            self._pose_history[0] = self._get_camera_pose()
+            self._pose_history_len = 1
 
         # Compute ground truth mesh for reward calculation (chamfer distance)
         t0 = time.perf_counter()

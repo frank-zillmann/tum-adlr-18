@@ -18,6 +18,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from src.robot_policies import (
     CameraPoseExtractor,
+    CameraPoseHistoryExtractor,
     MeshRenderingExtractor,
     WeightGridExtractor,
     CombinedExtractor,
@@ -135,6 +136,16 @@ def train(config: TrainConfig, checkpoint: str = None):
     if "camera_pose" in config.observations:
         extractors_config.append(
             (CameraPoseExtractor, {"features_dim": 32, "hidden_dims": [64]})
+        )
+    if "camera_pose_history" in config.observations:
+        extractors_config.append(
+            (CameraPoseHistoryExtractor, {
+                "features_dim": 64,
+                "d_model": 64,
+                "n_heads": 4,
+                "n_layers": 2,
+                "max_steps": config.horizon,
+            })
         )
     if "mesh_render" in config.observations:
         extractors_config.append((MeshRenderingExtractor, {"features_dim": 128}))

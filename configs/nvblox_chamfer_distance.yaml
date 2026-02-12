@@ -2,6 +2,7 @@ reconstruction_policy: nvblox
 reconstruction_metric: chamfer_distance
 
 observations:
-  - camera_pose
+#  - camera_pose
+  - camera_pose_history
   - mesh_render
   - weight_grid
