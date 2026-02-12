@@ -39,7 +39,7 @@ class TrainConfig:
     hidden_dims: List[int] = field(default_factory=lambda: [128, 64])
 
     # PPO and training
-    total_timesteps: int = 500_000
+    total_timesteps: int = 1_000_000
     n_envs: int = 1  # Number of parallel environments
     lr: float = 2e-4  # Learning rate
     n_steps: int = 2048  # Steps per env before update
@@ -51,9 +51,9 @@ class TrainConfig:
     ent_coef: float = 0.00  # Entropy bonus for exploration
     seed: int = 0  # Random seed for PPO (not for envs)
 
-    checkpoint_freq: int = 10_000
-    eval_freq: int = 10_000
-    n_eval_episodes: int = 1
+    checkpoint_freq: int = 50_000
+    eval_freq: int = 50_000
+    n_eval_episodes: int = 20
 
     # Logging
     log_dir: str = "data/logs"
