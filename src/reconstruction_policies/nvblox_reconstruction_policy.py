@@ -180,12 +180,26 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         weights = tsdf_result[:, 1].cpu().numpy()
         # TODO: Maybe later optimize further to avoid CPU-GPU transfer and doing reward computation on GPU
 
-        print(
-            f"TSDF stats: weight=0 voxels: {(weights == 0).sum()}, truncated voxels: {(np.abs(sdf_values) >= self.sdf_trunc).sum()}, sdf>99 voxels: {(sdf_values >= 99.0).sum()}"
-        )
+        # print(
+        #     f"TSDF stats: weight=0 voxels: {(weights == 0).sum()}, truncated voxels: {(np.abs(sdf_values) >= self.sdf_trunc).sum()}, sdf>99 voxels: {(sdf_values >= 99.0).sum()}"
+        # )
+        # # TSDF stats: weight=0 voxels: 32507, truncated voxels: 31798, sdf>99 voxels: 31702 => not expected
+
+        # # find values of weight=0 and sdf<99 and print stats about them => all 0 => no clear explanation
+        # # SDF values for unobserved voxels (weight=0, sdf<99): mean=0.0, std=0.0, min=0.0, max=0.0
+        # unobserved_mask = (weights == 0) & (sdf_values < 99.0)
+        # print(
+        #     f"SDF values for unobserved voxels (weight=0, sdf<99): mean={sdf_values[unobserved_mask].mean()}, std={sdf_values[unobserved_mask].std()}, min={sdf_values[unobserved_mask].min()}, max={sdf_values[unobserved_mask].max()}"
+        # )
+        # # find values which are truncated but <99 and print stats about them => all barely below truncation value => just a numerical issue on my side
+        # # SDF values for truncated voxels (|sdf|>=0.04, sdf<99): mean=0.03999999538064003, std=3.725290298461914e-09, min=0.03999999910593033, max=0.03999999910593033
+        # truncated_mask = (np.abs(sdf_values) >= self.sdf_trunc) & (sdf_values < 99.0)
+        # print(
+        #     f"SDF values for truncated voxels (|sdf|>={self.sdf_trunc}, sdf<99): mean={sdf_values[truncated_mask].mean()}, std={sdf_values[truncated_mask].std()}, min={sdf_values[truncated_mask].min()}, max={sdf_values[truncated_mask].max()}"
+        # )
 
         # set unobserved and truncated sdf values to 100 manually # TODO: How does nvblox handle this?
-        sdf_values[(weights == 0) | (np.abs(sdf_values) >= self.sdf_trunc)] = 100.0
+        sdf_values[(weights == 0)] = 100.0
 
         # print(f"Manipulated TSDF stats: weight=0 voxels: {(weights == 0).sum()}, truncated voxels: {(np.abs(sdf_values) >= self.sdf_trunc).sum()}, sdf>99 voxels: {(sdf_values >= 99.0).sum()}")
 
