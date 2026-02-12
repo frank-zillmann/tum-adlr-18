@@ -1,6 +1,7 @@
 """Train 3D reconstruction policy with PPO."""
 
 import argparse
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -27,9 +28,25 @@ from src.utils.env_factory import make_env_fn
 from configs.train_config import TrainConfig
 
 
+import signal
 import faulthandler
 
-faulthandler.enable()  # Enable faulthandler to trace segfaults
+# --- Crash diagnostics ------------------------------------------------
+# 1. Write crash traceback to a dedicated file (survives lost stderr)
+_fault_file = open("faulthandler.log", "w")
+faulthandler.enable(file=_fault_file, all_threads=True)
+# Also keep stderr output as backup
+faulthandler.enable(all_threads=True)
+
+# 2. Dump traceback on demand:  kill -SIGUSR1 <pid>
+faulthandler.register(signal.SIGUSR1, file=_fault_file, all_threads=True)
+
+# 3. Watchdog: dump traceback if process hangs for >300s without progress
+#    (resets each interval, repeats forever)
+faulthandler.dump_traceback_later(300, repeat=True, file=_fault_file)
+
+print(f"[diag] PID={os.getpid()}  faulthandler → faulthandler.log"
+      f"  |  kill -SIGUSR1 {os.getpid()} to dump traceback")
 
 
 class TimingCallback(BaseCallback):
