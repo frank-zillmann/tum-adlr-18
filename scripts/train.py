@@ -33,7 +33,7 @@ import faulthandler
 
 # --- Crash diagnostics ------------------------------------------------
 # 1. Write crash traceback to a dedicated file (survives lost stderr)
-_fault_file = open("faulthandler.log", "w")
+_fault_file = open("faulthandler_4.log", "w")
 faulthandler.enable(file=_fault_file, all_threads=True)
 # Also keep stderr output as backup
 faulthandler.enable(all_threads=True)
@@ -45,8 +45,10 @@ faulthandler.register(signal.SIGUSR1, file=_fault_file, all_threads=True)
 #    (resets each interval, repeats forever)
 faulthandler.dump_traceback_later(300, repeat=True, file=_fault_file)
 
-print(f"[diag] PID={os.getpid()}  faulthandler → faulthandler.log"
-      f"  |  kill -SIGUSR1 {os.getpid()} to dump traceback")
+print(
+    f"[diag] PID={os.getpid()}  faulthandler → faulthandler.log"
+    f"  |  kill -SIGUSR1 {os.getpid()} to dump traceback"
+)
 
 
 class TimingCallback(BaseCallback):
@@ -156,13 +158,16 @@ def train(config: TrainConfig, checkpoint: str = None):
         )
     if "camera_pose_history" in config.observations:
         extractors_config.append(
-            (CameraPoseHistoryExtractor, {
-                "features_dim": 64,
-                "d_model": 64,
-                "n_heads": 4,
-                "n_layers": 2,
-                "max_steps": config.horizon,
-            })
+            (
+                CameraPoseHistoryExtractor,
+                {
+                    "features_dim": 64,
+                    "d_model": 64,
+                    "n_heads": 4,
+                    "n_layers": 2,
+                    "max_steps": config.horizon,
+                },
+            )
         )
     if "mesh_render" in config.observations:
         extractors_config.append((MeshRenderingExtractor, {"features_dim": 128}))

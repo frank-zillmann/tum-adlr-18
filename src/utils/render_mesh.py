@@ -1,56 +1,13 @@
-"""Mesh rendering using Open3D's offscreen renderer."""
+"""Mesh rendering using OpenCV rasterization (no OpenGL dependency).
 
-import contextlib
-import os
-import sys
-from typing import Tuple, Optional
+Uses a painter's-algorithm triangle rasterizer built on cv2.fillConvexPoly.
+This avoids all OpenGL/EGL/Filament context conflicts with MuJoCo.
+"""
 
+from typing import Tuple
+
+import cv2
 import numpy as np
-import open3d as o3d
-
-
-@contextlib.contextmanager
-def _suppress_stdout_stderr():
-    """Temporarily suppress stdout and stderr at the C level (for Filament engine spam)."""
-    # Save original file descriptors
-    stdout_fd = sys.stdout.fileno()
-    stderr_fd = sys.stderr.fileno()
-    old_stdout = os.dup(stdout_fd)
-    old_stderr = os.dup(stderr_fd)
-
-    # Redirect to /dev/null
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    os.dup2(devnull, stdout_fd)
-    os.dup2(devnull, stderr_fd)
-    try:
-        yield
-    finally:
-        # Restore original file descriptors
-        os.dup2(old_stdout, stdout_fd)
-        os.dup2(old_stderr, stderr_fd)
-        os.close(old_stdout)
-        os.close(old_stderr)
-        os.close(devnull)
-
-
-o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
-
-# Global renderer cache to avoid memory leak from repeated creation/destruction
-# Key: (width, height), Value: OffscreenRenderer
-_renderer_cache: dict = {}
-
-
-def _get_or_create_renderer(
-    width: int, height: int
-) -> o3d.visualization.rendering.OffscreenRenderer:
-    """Get cached renderer or create new one for given resolution."""
-    key = (width, height)
-    if key not in _renderer_cache:
-        with _suppress_stdout_stderr():
-            _renderer_cache[key] = o3d.visualization.rendering.OffscreenRenderer(
-                width, height
-            )
-    return _renderer_cache[key]
 
 
 def render_mesh(
@@ -63,85 +20,64 @@ def render_mesh(
     lighting: str = "ambient",
 ) -> np.ndarray:
     """
-    Renders mesh using Open3D's offscreen renderer.
+    Renders mesh via CPU rasterization (no OpenGL required).
 
     Args:
         vertices: (N, 3) vertex positions
         faces: (M, 3) triangle indices
-        extrinsic: (4, 4) camera extrinsic matrix (world-to-camera)
+        extrinsic: (4, 4) camera-to-world pose matrix
         intrinsic: (3, 3) camera intrinsic matrix
         resolution: (H, W) output resolution
-        grayscale: If True, return grayscale image (H, W), else RGB (H, W, 3)
-        lighting: Lighting mode, one of:
-            - "unlit": Flat shading, no lighting (most consistent for NN input)
-            - "ambient": Soft ambient lighting only (uniform, no harsh shadows)
+        grayscale: If True, return (H, W); else (H, W, 3)
+        lighting: "unlit" (flat 1.0) or "ambient" (simple diffuse)
 
     Returns:
-        Image array with values in [0, 1], shape (H, W) or (H, W, 3)
+        Image array in [0, 1], shape (H, W) or (H, W, 3)
     """
     H, W = resolution
+    empty = np.zeros((H, W) if grayscale else (H, W, 3), dtype=np.float32)
 
-    # Handle empty mesh
     if len(vertices) == 0 or len(faces) == 0:
-        if grayscale:
-            return np.zeros((H, W), dtype=np.float32)
-        return np.zeros((H, W, 3), dtype=np.float32)
+        return empty
 
-    # Create Open3D mesh
-    mesh = o3d.geometry.TriangleMesh()
-    mesh.vertices = o3d.utility.Vector3dVector(vertices.astype(np.float64))
-    mesh.triangles = o3d.utility.Vector3iVector(faces.astype(np.int32))
-    mesh.compute_vertex_normals()
+    # --- world → camera ---------------------------------------------------
+    w2c = np.linalg.inv(extrinsic)
+    verts_cam = (w2c[:3, :3] @ vertices.T + w2c[:3, 3:4]).T  # (N, 3)
 
-    # Paint mesh light gray for visibility
-    mesh.paint_uniform_color([0.7, 0.7, 0.7])
+    # --- project to pixel (u, v) -----------------------------------------
+    proj = (intrinsic @ verts_cam.T).T  # (N, 3)
+    z = proj[:, 2]
+    safe_z = np.where(z > 1e-6, z, 1e-6)
+    px = proj[:, :2] / safe_z[:, None]  # (N, 2)
 
-    # Get or create cached renderer (avoids memory leak from repeated creation)
-    renderer = _get_or_create_renderer(W, H)
+    # --- cull & sort faces ------------------------------------------------
+    face_z = z[faces]  # (M, 3)
+    valid = face_z.min(axis=1) > 0.01
+    valid_faces = faces[valid]
+    if len(valid_faces) == 0:
+        return empty
 
-    # Clear previous scene content
-    renderer.scene.clear_geometry()
-    renderer.scene.set_background([0.0, 0.0, 0.0, 1.0])  # Black background
+    mean_depth = face_z[valid].mean(axis=1)
+    order = np.argsort(-mean_depth)  # back-to-front
+    sorted_faces = valid_faces[order]
 
-    # Add mesh to scene with appropriate shader
-    material = o3d.visualization.rendering.MaterialRecord()
-    if lighting == "unlit":
-        # Flat shading, no lighting (most consistent for neural network input)
-        material.shader = "defaultUnlit"
-    elif lighting == "ambient":
-        # Soft ambient lighting only
-        material.shader = "defaultLit"
-    else:
-        raise ValueError(
-            f"Unknown lighting mode: {lighting}. Use 'unlit' or 'ambient'."
-        )
-    renderer.scene.add_geometry("mesh", mesh, material)
-
-    # Configure lighting
+    # --- shading ----------------------------------------------------------
+    fv = verts_cam[sorted_faces]  # (M', 3, 3)
     if lighting == "ambient":
-        # Disable sun light and use soft ambient lighting profile
-        renderer.scene.scene.enable_sun_light(False)
-        renderer.scene.set_lighting(
-            renderer.scene.LightingProfile.SOFT_SHADOWS, (0, 0, 0)
-        )
+        normals = np.cross(fv[:, 1] - fv[:, 0], fv[:, 2] - fv[:, 0])
+        norms = np.linalg.norm(normals, axis=1, keepdims=True)
+        normals = normals / np.maximum(norms, 1e-8)
+        shade = (np.abs(normals[:, 2]) * 0.6 + 0.3).astype(np.float32)
+    else:
+        shade = np.full(len(sorted_faces), 1.0, dtype=np.float32)
 
-    # Setup camera intrinsics (must match render resolution)
-    fx, fy = intrinsic[0, 0], intrinsic[1, 1]
-    cx, cy = intrinsic[0, 2], intrinsic[1, 2]
-    intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(W, H, fx, fy, cx, cy)
+    # --- rasterize (painter's algorithm) ----------------------------------
+    img = np.zeros((H, W), dtype=np.float32)
+    tri_px = px[sorted_faces].astype(np.int32)  # (M', 3, 2)
 
-    # Setup camera extrinsics
-    # Robosuite's get_camera_extrinsic_matrix returns camera-to-world (camera pose in world)
-    # Open3D's setup_camera expects world-to-camera (view matrix), so we invert
-    extrinsic_w2c = np.linalg.inv(extrinsic)
-    renderer.setup_camera(intrinsic_o3d, extrinsic_w2c)
+    for i in range(len(sorted_faces)):
+        cv2.fillConvexPoly(img, tri_px[i], float(shade[i]))
 
-    # Render and copy result
-    img = np.asarray(renderer.render_to_image()).copy()
-
-    # Convert to float [0, 1]
-    result = img.astype(np.float32) / 255.0
-
-    if grayscale:
-        return np.mean(result, axis=-1)
-    return result
+    if not grayscale:
+        img = np.stack([img, img, img], axis=-1)
+    return img
