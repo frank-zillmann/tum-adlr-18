@@ -149,7 +149,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         collect_timing=False,
         eval_log_dir: Optional[Path] = None,
     ):
-        self._step_count = 0
+        self._step_count = -1  # -1 so first reset() increments to episode 1
         self._episode_count = 0
         self.horizon = horizon
 
@@ -514,13 +514,14 @@ class Reconstruct3DGymWrapper(gym.Env):
         with self.timing_stats.time("simulation_total"):
             obs_dict, _, done, info = self.robot_env.step(action)
 
+        self._step_count += 1
+
         obs, reward, reward_info_dict = self._integrate_and_reconstruct(
             obs_dict, action
         )
 
         info.update(reward_info_dict)
         self.timing_stats.step()
-        self._step_count += 1
 
         return obs, reward, done, self._step_count >= self.robot_env.horizon, info
 
@@ -540,8 +541,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         with self.timing_stats.time("reset_reconstruction_total"):
             self.reconstruction_policy.reset()
 
+        # Skip episode increment on spurious resets (no steps since last reset)
+        if self._step_count != 0:
+            self._episode_count += 1
         self._step_count = 0
-        self._episode_count += 1
 
         # Reset camera pose history buffer
         self._pose_history[:] = 0.0
