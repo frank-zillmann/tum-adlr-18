@@ -1,0 +1,4 @@
+# overwrite obs for scripted policy
+observations:
+- camera_pose
+- camera_rotation_matrix
