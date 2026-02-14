@@ -31,8 +31,9 @@ class TrainConfig:
     bbox_padding: float = 0.05
 
     reward_scale: float = 1.0
-    characteristic_error: float = 0.5
-    action_penalty_scale: float = 0.02
+    characteristic_error: float = 1.0 / 40  # expected error decrease per step
+    reward_mode: str = "delta"  # "exponential" or "delta"
+    action_penalty_scale: float = 0.1
 
     # Network
     features_dim: int = 256

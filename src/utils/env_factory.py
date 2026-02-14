@@ -70,6 +70,7 @@ def create_env(
         bbox_padding=config.bbox_padding,
         reward_scale=config.reward_scale,
         characteristic_error=config.characteristic_error,
+        reward_mode=config.reward_mode,
         action_penalty_scale=config.action_penalty_scale,
         eval_log_dir=eval_log_dir,
     )

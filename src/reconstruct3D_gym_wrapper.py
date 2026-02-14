@@ -142,6 +142,7 @@ class Reconstruct3DGymWrapper(gym.Env):
         render_width=64,
         sdf_gt_size=32,
         bbox_padding=0.05,
+        reward_mode="exponential",
         reward_scale=1.0,
         characteristic_error=0.01,
         action_penalty_scale=0.0,
@@ -158,6 +159,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         self.timing_stats = TimingStats(enabled=collect_timing)
         self.reconstruction_metric = reconstruction_metric
         self.sdf_gt_size = sdf_gt_size
+        self.reward_mode = reward_mode
+        self.reward_scale = reward_scale
+        self.characteristic_error = characteristic_error
+        self.action_penalty_scale = action_penalty_scale
 
         # Observations to include in observation space
         self.observations = observations
@@ -221,9 +226,6 @@ class Reconstruct3DGymWrapper(gym.Env):
             camera_widths=camera_width,
             sdf_size=sdf_gt_size,
             bbox_padding=bbox_padding,
-            reward_scale=reward_scale,
-            characteristic_error=characteristic_error,
-            action_penalty_scale=action_penalty_scale,
         )
 
         # Initialize reconstruction policy
@@ -457,6 +459,10 @@ class Reconstruct3DGymWrapper(gym.Env):
                     self.reconstruction_policy, "sdf_trunc", None
                 ),  # only needed for voxelwise_tsdf_error
                 output_info_dict=True,
+                reward_mode=self.reward_mode,
+                reward_scale=self.reward_scale,
+                characteristic_error=self.characteristic_error,
+                action_penalty_scale=self.action_penalty_scale,
             )
 
         # Save eval data if in eval mode
