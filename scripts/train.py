@@ -92,6 +92,23 @@ class TimingCallback(BaseCallback):
         return True
 
 
+def _get_tb_writer(logger):
+    """Get SB3's own SummaryWriter from its logger."""
+    from stable_baselines3.common.logger import TensorBoardOutputFormat
+
+    for fmt in logger.output_formats:
+        if isinstance(fmt, TensorBoardOutputFormat):
+            return fmt.writer
+    return None
+
+
+def _log_scalar_info(writer, info, prefix, step):
+    """Write all scalar values from an info dict to TensorBoard."""
+    for key, value in info.items():
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            writer.add_scalar(f"{prefix}/{key}", value, step)
+
+
 class TensorboardCallback(BaseCallback):
     """Callback to log custom metrics from environment info to Tensorboard."""
 
@@ -99,37 +116,46 @@ class TensorboardCallback(BaseCallback):
         super().__init__(verbose)
         self._tb_writer = None
 
-    def _get_tb_writer(self):
-        """Lazily fetch SB3's own SummaryWriter (available after init_callback)."""
-        if self._tb_writer is None:
-            from stable_baselines3.common.logger import TensorBoardOutputFormat
-
-            for fmt in self.logger.output_formats:
-                if isinstance(fmt, TensorBoardOutputFormat):
-                    self._tb_writer = fmt.writer
-                    break
-        return self._tb_writer
-
     def _on_step(self) -> bool:
-
         try:
-            writer = self._get_tb_writer()
-            if writer is None:
+            if self._tb_writer is None:
+                self._tb_writer = _get_tb_writer(self.logger)
+            if self._tb_writer is None:
                 return True
 
             infos = self.locals.get("infos")
-
             if infos:
                 for i, info in enumerate(infos):
-                    for key, value in info.items():
-                        if isinstance(value, (int, float, np.integer, np.floating)):
-                            writer.add_scalar(
-                                f"env_{i}/{key}", value, self.num_timesteps
-                            )
+                    _log_scalar_info(
+                        self._tb_writer, info, f"env_{i}", self.num_timesteps
+                    )
         except Exception as e:
             print(f"Error in TensorboardCallback: {e}")
 
         return True
+
+
+class LoggingEvalCallback(EvalCallback):
+    """EvalCallback that also logs per-step eval info metrics to TensorBoard."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._eval_step_count = 0
+        self._tb_writer = None
+
+    def _log_success_callback(self, locals_, globals_):
+        super()._log_success_callback(locals_, globals_)
+        try:
+            if self._tb_writer is None:
+                self._tb_writer = _get_tb_writer(self.logger)
+            if self._tb_writer is None:
+                return
+            info = locals_.get("info")
+            if info:
+                _log_scalar_info(self._tb_writer, info, "eval", self._eval_step_count)
+            self._eval_step_count += 1
+        except Exception as e:
+            print(f"Error in LoggingEvalCallback: {e}")
 
 
 def train(config: TrainConfig, checkpoint: str = None):
@@ -228,7 +254,7 @@ def train(config: TrainConfig, checkpoint: str = None):
             save_path=str(log_dir / "checkpoints"),
             name_prefix="model",
         ),
-        EvalCallback(
+        LoggingEvalCallback(
             eval_env,
             best_model_save_path=str(log_dir / "best"),
             eval_freq=config.eval_freq,
