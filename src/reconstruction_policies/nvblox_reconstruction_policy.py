@@ -149,7 +149,8 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             or not np.allclose(self._cached_query_params[1], query_params[1])
             or not np.isclose(self._cached_query_params[2], query_params[2])
         ):
-            print("Creating new SDF query grid (should be cached and not happen often)")
+            # print("Creating new SDF query grid (should be cached and not happen every step)")
+
             # Create grid in normalized [-1, 1] space (matching mesh2sdf convention)
             # mesh2sdf uses uniform sampling in [-1, 1]^3
             coords_1d = np.linspace(-1, 1, sdf_size)

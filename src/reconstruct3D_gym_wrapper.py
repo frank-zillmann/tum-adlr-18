@@ -196,7 +196,7 @@ class Reconstruct3DGymWrapper(gym.Env):
             -0.25,
         ]
 
-        print(f"Using controller config: {controller_config}")
+        # print(f"Using controller config: {controller_config}")
 
         # Always include birdview for reconstruction rendering
         # TODO: try to remove birdview camera in train mode as only extrinsic and intrinsic but not the simulation renderings are needed
@@ -277,6 +277,9 @@ class Reconstruct3DGymWrapper(gym.Env):
         low, high = self.robot_env.action_spec
         self.action_space = spaces.Box(
             low=low.astype(np.float32), high=high.astype(np.float32), dtype=np.float32
+        )
+        print(
+            f"Action space shape: {self.action_space.shape}, low: {self.action_space.low}, high: {self.action_space.high}"
         )
 
     def _get_camera_pose(self) -> np.ndarray:
@@ -454,7 +457,7 @@ class Reconstruct3DGymWrapper(gym.Env):
                 truncation_distance=getattr(
                     self.reconstruction_policy, "sdf_trunc", None
                 ),  # only needed for voxelwise_tsdf_error
-                output_error=True,
+                output_info_dict=True,
             )
 
         # Save eval data if in eval mode
