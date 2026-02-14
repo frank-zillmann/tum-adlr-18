@@ -360,15 +360,20 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         return obs
 
-    def step(
-        self, action: np.ndarray
-    ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
-        """Execute action and return (obs, reward, terminated, truncated, info)."""
+    def _integrate_and_reconstruct(
+        self, obs_dict: dict, action: Optional[np.ndarray] = None
+    ) -> Tuple[Dict[str, np.ndarray], float, Dict[str, Any]]:
+        """Integrate camera obs, reconstruct, compute reward, and build gym obs.
 
-        # Step robot environment (physics + rendering)
-        with self.timing_stats.time("simulation_total"):
-            obs_dict, _, done, info = self.robot_env.step(action)
+        Shared pipeline used by both step() and reset().
 
+        Args:
+            obs_dict: Raw observation dict from robosuite (must contain camera images).
+            action: Robot action (None during reset — disables action penalty).
+
+        Returns:
+            (obs, reward, reward_info_dict)
+        """
         # Get depth observation and convert to real depth map
         rgb_image = obs_dict.get("robot0_eye_in_hand_image")
         depth_image = obs_dict.get("robot0_eye_in_hand_depth")
@@ -378,7 +383,6 @@ class Reconstruct3DGymWrapper(gym.Env):
                 or np.any(depth_image < 0.0)
                 or np.any(depth_image > 1.0)
             ):
-                # Log diagnostic info when problematic values are detected
                 n_nan = np.sum(np.isnan(depth_image))
                 n_invalid = np.sum((depth_image < 0.0) | (depth_image > 1.0))
                 print(
@@ -419,6 +423,8 @@ class Reconstruct3DGymWrapper(gym.Env):
             )
 
         # Get required reconstructions
+        mesh_reconstruction = None
+        tsdf_reconstruction = None
         with self.timing_stats.time("reconstruction_total"):
             if (
                 self.reconstruction_metric == "chamfer_distance"
@@ -457,7 +463,7 @@ class Reconstruct3DGymWrapper(gym.Env):
                 reconstruction_metric=self.reconstruction_metric,
                 truncation_distance=getattr(
                     self.reconstruction_policy, "sdf_trunc", None
-                ),  # only needed for voxelwise_tsdf_error
+                ),
                 output_info_dict=True,
                 reward_mode=self.reward_mode,
                 reward_scale=self.reward_scale,
@@ -472,9 +478,7 @@ class Reconstruct3DGymWrapper(gym.Env):
                 obs_dict=obs_dict,
                 mesh_reconstruction=mesh_reconstruction,
                 sdf_reconstruction=(
-                    tsdf_reconstruction[0]
-                    if "tsdf_reconstruction" in locals()
-                    else None
+                    tsdf_reconstruction[0] if tsdf_reconstruction is not None else None
                 ),
             )
 
@@ -488,18 +492,33 @@ class Reconstruct3DGymWrapper(gym.Env):
                 sdf_grid=(
                     tsdf_reconstruction[0]
                     if "sdf_grid" in self.observation_space.spaces
+                    and tsdf_reconstruction is not None
                     else None
                 ),
                 weight_grid=(
                     tsdf_reconstruction[1]
                     if "weight_grid" in self.observation_space.spaces
+                    and tsdf_reconstruction is not None
                     else None
                 ),
             )
 
-        # Add detailed error metrics to info which is now called reward_info_dict
-        info.update(reward_info_dict)
+        return obs, reward, reward_info_dict
 
+    def step(
+        self, action: np.ndarray
+    ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
+        """Execute action and return (obs, reward, terminated, truncated, info)."""
+
+        # Step robot environment (physics + rendering)
+        with self.timing_stats.time("simulation_total"):
+            obs_dict, _, done, info = self.robot_env.step(action)
+
+        obs, reward, reward_info_dict = self._integrate_and_reconstruct(
+            obs_dict, action
+        )
+
+        info.update(reward_info_dict)
         self.timing_stats.step()
         self._step_count += 1
 
@@ -513,9 +532,9 @@ class Reconstruct3DGymWrapper(gym.Env):
         if seed is not None:
             np.random.seed(seed)
 
-        # Reset robot environment (MuJoCo state)
+        # Reset robot environment (MuJoCo state) — returns initial obs with camera images
         with self.timing_stats.time("reset_env_total"):
-            self.robot_env.reset()
+            obs_dict = self.robot_env.reset()
 
         # Reset reconstruction policy (TSDF volume)
         with self.timing_stats.time("reset_reconstruction_total"):
@@ -524,12 +543,9 @@ class Reconstruct3DGymWrapper(gym.Env):
         self._step_count = 0
         self._episode_count += 1
 
-        # Reset camera pose history buffer and record initial pose
+        # Reset camera pose history buffer
         self._pose_history[:] = 0.0
         self._pose_history_len = 0
-        if "camera_pose_history" in self.observation_space.spaces:
-            self._pose_history[0] = self._get_camera_pose()
-            self._pose_history_len = 1
 
         # Compute ground truth mesh for reward calculation (chamfer distance)
         with self.timing_stats.time("reset_mesh_total"):
@@ -543,35 +559,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         if self.timing_stats.enabled:
             self.timing_stats.n_resets += 1
 
-        return (
-            self._get_obs(
-                mesh=(
-                    (
-                        np.zeros((0, 3), dtype=np.float32),
-                        np.zeros((0, 3), dtype=np.int32),
-                    )
-                    if "mesh_render" in self.observation_space.spaces
-                    else None
-                ),
-                sdf_grid=(
-                    np.zeros(
-                        (1, self.sdf_gt_size, self.sdf_gt_size, self.sdf_gt_size),
-                        dtype=np.float32,
-                    )
-                    if "sdf_grid" in self.observation_space.spaces
-                    else None
-                ),
-                weight_grid=(
-                    np.zeros(
-                        (1, self.sdf_gt_size, self.sdf_gt_size, self.sdf_gt_size),
-                        dtype=np.float32,
-                    )
-                    if "weight_grid" in self.observation_space.spaces
-                    else None
-                ),
-            ),
-            {},
-        )
+        # Integrate initial camera obs and compute baseline error for cached_error
+        obs, _, _ = self._integrate_and_reconstruct(obs_dict, action=None)
+
+        return obs, {}
 
     def get_timing_stats(self) -> Optional[TimingStats]:
         """Get accumulated timing statistics (only if collect_timing=True)."""
