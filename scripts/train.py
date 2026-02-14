@@ -7,7 +7,6 @@ from datetime import datetime
 
 import numpy as np
 import torch
-from torch.utils.tensorboard import SummaryWriter
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import (
     CheckpointCallback,
@@ -96,35 +95,41 @@ class TimingCallback(BaseCallback):
 class TensorboardCallback(BaseCallback):
     """Callback to log custom metrics from environment info to Tensorboard."""
 
-    def __init__(self, log_dir: Path, verbose: int = 0):
+    def __init__(self, verbose: int = 0):
         super().__init__(verbose)
-        self.writer = SummaryWriter(log_dir=str(log_dir))
+        self._tb_writer = None
+
+    def _get_tb_writer(self):
+        """Lazily fetch SB3's own SummaryWriter (available after init_callback)."""
+        if self._tb_writer is None:
+            from stable_baselines3.common.logger import TensorBoardOutputFormat
+
+            for fmt in self.logger.output_formats:
+                if isinstance(fmt, TensorBoardOutputFormat):
+                    self._tb_writer = fmt.writer
+                    break
+        return self._tb_writer
 
     def _on_step(self) -> bool:
 
         try:
-            # Access infos from the last step (list of info dicts, one per env)
+            writer = self._get_tb_writer()
+            if writer is None:
+                return True
+
             infos = self.locals.get("infos")
 
             if infos:
                 for i, info in enumerate(infos):
                     for key, value in info.items():
-                        # Check for scalars (float, int, or 0-d numpy arrays)
                         if isinstance(value, (int, float, np.integer, np.floating)):
-                            try:
-                                self.writer.add_scalar(
-                                    f"env_{i}/{key}", value, self.num_timesteps
-                                )
-                            except Exception as e:
-                                print(f"Error logging {key}={value}: {e}")
+                            writer.add_scalar(
+                                f"env_{i}/{key}", value, self.num_timesteps
+                            )
         except Exception as e:
             print(f"Error in TensorboardCallback: {e}")
 
         return True
-
-    def _on_training_end(self) -> None:
-        if self.writer:
-            self.writer.close()
 
 
 def train(config: TrainConfig, checkpoint: str = None):
@@ -229,7 +234,7 @@ def train(config: TrainConfig, checkpoint: str = None):
             eval_freq=config.eval_freq,
             n_eval_episodes=config.n_eval_episodes,
         ),
-        TensorboardCallback(log_dir=log_dir),
+        TensorboardCallback(),
     ]
 
     # Add timing callback if benchmarking
