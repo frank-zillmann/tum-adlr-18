@@ -115,12 +115,12 @@ In the created file external/robosuite/robosuite/macros_private.py switch from o
 IMAGE_CONVENTION = "opencv"  # Options are {"opengl", "opencv"}
 ```
 
-**7. Segmentation fault after several thousand steps** 
+**7. CUDA out of memory error**:
 
-`pgrep -f "train.py"
-[1]+  Segmentation fault      (core dumped) nohup python scripts/train.py --config configs/nvblox_voxelwise_tsdf_error.yaml > nvblox_voxelwise_tsdf_error.log 2>&1`
+Memory consumption after several hours of training:
 
-No fix found yet. Workaround: Restart training from last checkpoint.
+```bash
+pid=$(pgrep -f "train.py")
 
 ps -o pid,comm,rss,vsz -p "$pid"
 PID COMMAND RSS VSZ
@@ -128,5 +128,16 @@ PID COMMAND RSS VSZ
 
 nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader
 575936, python, 11538 MiB
+```
 
+Error after about 12 hours of training:
+```bash
 CUDA error = 2 at /nvblox/nvblox/include/nvblox/core/internal/impl/unified_vector_impl.h:231 'cudaMallocAsync(&new_buffer, sizeof(T) * capacity, cuda_stream)'. Error string: out of memory.
+```
+
+**8. RESOLVED: Segmentation fault after several thousand steps** 
+
+`pgrep -f "train.py"
+[1]+  Segmentation fault      (core dumped) nohup python scripts/train.py --config configs/nvblox_voxelwise_tsdf_error.yaml > nvblox_voxelwise_tsdf_error.log 2>&1`
+
+Caused by now deprecated/replaced render_mesh_open3d function which had a memory leak.
