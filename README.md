@@ -122,9 +122,11 @@ IMAGE_CONVENTION = "opencv"  # Options are {"opengl", "opencv"}
 
 No fix found yet. Workaround: Restart training from last checkpoint.
 
-TODO: 
-- faulthandler stack trace
-- check RAM increase
+ps -o pid,comm,rss,vsz -p "$pid"
+PID COMMAND RSS VSZ
+575936 pt_main_thread 3729660 57844976
 
-Please find out how nvblox encodes unobserved or truncated voxels in the sdf_values.
-What happens if a query point must be interpolated between a observed and unobserved or a truncated and untruncated voxel?
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader
+575936, python, 11538 MiB
+
+CUDA error = 2 at /nvblox/nvblox/include/nvblox/core/internal/impl/unified_vector_impl.h:231 'cudaMallocAsync(&new_buffer, sizeof(T) * capacity, cuda_stream)'. Error string: out of memory.
