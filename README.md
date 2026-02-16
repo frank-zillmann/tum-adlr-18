@@ -117,21 +117,56 @@ IMAGE_CONVENTION = "opencv"  # Options are {"opengl", "opencv"}
 
 **7. CUDA out of memory error**:
 
-Memory consumption after several hours of training:
+Memory consumption:
 
 ```bash
 pid=$(pgrep -f "train.py")
 
+# after about 1 minute
+ps -o pid,comm,rss,vsz -p "$pid"
+    PID COMMAND           RSS    VSZ
+2211719 pt_main_thread  2698420 47006788
+
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader | grep "$pid"
+2211719, python, 2104 MiB
+
+# after about 30 minutes
+ps -o pid,comm,rss,vsz -p "$pid"
+    PID COMMAND           RSS    VSZ
+2211719 pt_main_thread  3295588 48036664
+
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader | grep "$pid"
+2211719, python, 2676 MiB
+
+# after some hours
 ps -o pid,comm,rss,vsz -p "$pid"
 PID COMMAND RSS VSZ
 575936 pt_main_thread 3729660 57844976
 
-nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader | grep "$pid"
 575936, python, 11538 MiB
 ```
 
 Error after about 12 hours of training:
 ```bash
+CUDA error = 2 at /nvblox/nvblox/include/nvblox/core/internal/impl/unified_vector_impl.h:231 'cudaMallocAsync(&new_buffer, sizeof(T) * capacity, cuda_stream)'. Error string: out of memory.
+
+# OR
+
+WARNING: Nan, Inf or huge value in QACC at DOF 22. The simulation is unstable. Time = 1.2860.
+
+WARNING: Nan, Inf or huge value in QACC at DOF 22. The simulation is unstable. Time = 4.4220.
+
+WARNING: Nan, Inf or huge value in QACC at DOF 22. The simulation is unstable. Time = 1.3420.
+
+WARNING: Nan, Inf or huge value in QACC at DOF 22. The simulation is unstable. Time = 1.7200.
+
+WARNING: Nan, Inf or huge value in QACC at DOF 22. The simulation is unstable. Time = 1.4180.
+
+WARNING: Nan, Inf or huge value in QACC at DOF 23. The simulation is unstable. Time = 3.3380.
+
+WARNING: Nan, Inf or huge value in QACC at DOF 22. The simulation is unstable. Time = 7.2740.
+
 CUDA error = 2 at /nvblox/nvblox/include/nvblox/core/internal/impl/unified_vector_impl.h:231 'cudaMallocAsync(&new_buffer, sizeof(T) * capacity, cuda_stream)'. Error string: out of memory.
 ```
 
@@ -141,3 +176,7 @@ CUDA error = 2 at /nvblox/nvblox/include/nvblox/core/internal/impl/unified_vecto
 [1]+  Segmentation fault      (core dumped) nohup python scripts/train.py --config configs/nvblox_voxelwise_tsdf_error.yaml > nvblox_voxelwise_tsdf_error.log 2>&1`
 
 Caused by now deprecated/replaced render_mesh_open3d function which had a memory leak.
+
+## Next steps:
+
+- exclude voxels of the underside of the table / the table at all
