@@ -31,10 +31,10 @@ import numpy as np
 #   lambda step: "birdview_mesh_gt"
 #
 
-TOP_LEFT = lambda step: f"step_{step:03d}_robot0_eye_in_hand_depth"
-TOP_RIGHT = lambda step: f"step_{step:03d}_birdview_mesh_reconstruction"
-BOTTOM_LEFT = lambda step: f"step_{step:03d}_frontview_image"
-BOTTOM_RIGHT = lambda step: "birdview_mesh_gt"
+TOP_LEFT = lambda step: "birdview_mesh_gt"
+TOP_RIGHT = lambda step: f"step_{step:03d}_frontview_image"
+BOTTOM_LEFT = lambda step: f"step_{step:03d}_birdview_mesh_reconstruction"
+BOTTOM_RIGHT = lambda step: f"step_{step:03d}_robot0_eye_in_hand_depth"
 
 # Common size for all images (width, height)
 COMMON_SIZE = (128, 128)
