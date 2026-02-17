@@ -138,10 +138,17 @@ class TensorboardCallback(BaseCallback):
 class LoggingEvalCallback(EvalCallback):
     """EvalCallback that also logs per-step eval info metrics to TensorBoard."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, eval_on_start: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self._eval_step_count = 0
         self._tb_writer = None
+        self._eval_on_start = eval_on_start
+
+    def _on_training_start(self):
+        """Run an evaluation at the very start (fresh model only)."""
+        super()._on_training_start()
+        if self._eval_on_start:
+            self._on_step()
 
     def _log_success_callback(self, locals_, globals_):
         super()._log_success_callback(locals_, globals_)
@@ -259,6 +266,7 @@ def train(config: TrainConfig, checkpoint: str = None):
             best_model_save_path=str(log_dir / "best"),
             eval_freq=config.eval_freq,
             n_eval_episodes=config.n_eval_episodes,
+            eval_on_start=not checkpoint,
         ),
         TensorboardCallback(),
     ]
