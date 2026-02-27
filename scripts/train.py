@@ -10,9 +10,7 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import (
     CheckpointCallback,
-    EvalCallback,
     CallbackList,
-    BaseCallback,
 )
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
@@ -24,145 +22,8 @@ from src.robot_policies import (
     CombinedExtractor,
 )
 from src.utils.env_factory import make_env_fn
+from src.utils.callbacks import TimingCallback, LoggingEvalCallback, LoggingTrainCallback
 from configs.train_config import TrainConfig
-
-
-import signal
-import faulthandler
-
-# # --- Crash diagnostics ------------------------------------------------
-# # 1. Write crash traceback to a dedicated file (survives lost stderr)
-# _fault_file = open("faulthandler_4.log", "w")
-# faulthandler.enable(file=_fault_file, all_threads=True)
-# # Also keep stderr output as backup
-# faulthandler.enable(all_threads=True)
-
-# # 2. Dump traceback on demand:  kill -SIGUSR1 <pid>
-# faulthandler.register(signal.SIGUSR1, file=_fault_file, all_threads=True)
-
-# # 3. Watchdog: dump traceback if process hangs for >300s without progress
-# #    (resets each interval, repeats forever)
-# faulthandler.dump_traceback_later(300, repeat=True, file=_fault_file)
-
-# print(
-#     f"[diag] PID={os.getpid()}  faulthandler → faulthandler.log"
-#     f"  |  kill -SIGUSR1 {os.getpid()} to dump traceback"
-# )
-
-
-class TimingCallback(BaseCallback):
-    """Callback to save environment timing stats at the end of training."""
-
-    def __init__(self, log_dir: Path, verbose: int = 0):
-        super().__init__(verbose)
-        self.log_dir = log_dir
-
-    def _on_training_end(self) -> None:
-        """Save timing stats when training ends."""
-        # Access the unwrapped env to get timing stats
-        # For DummyVecEnv, we can access envs[0]
-        try:
-            env = self.training_env.envs[0]
-            # Unwrap Monitor to get the Reconstruct3DGymWrapper
-            while hasattr(env, "env"):
-                env = env.env
-
-            stats = env.get_timing_stats()
-            if stats and stats.n_steps > 0:
-                summary = stats.summary()
-                print(f"\n{'='*60}")
-                print("TRAINING TIMING STATS")
-                print(f"{'='*60}")
-                print(summary)
-
-                # Save to file
-                benchmark_path = self.log_dir / "timing_stats.txt"
-                with open(benchmark_path, "w") as f:
-                    f.write("Training Timing Statistics\n")
-                    f.write(f"{'='*40}\n\n")
-                    f.write(summary)
-                    f.write("\n")
-                print(f"\nTiming stats saved to: {benchmark_path}")
-                print(f"{'='*60}")
-        except Exception as e:
-            if self.verbose > 0:
-                print(f"Could not save timing stats: {e}")
-
-    def _on_step(self) -> bool:
-        return True
-
-
-def _get_tb_writer(logger):
-    """Get SB3's own SummaryWriter from its logger."""
-    from stable_baselines3.common.logger import TensorBoardOutputFormat
-
-    for fmt in logger.output_formats:
-        if isinstance(fmt, TensorBoardOutputFormat):
-            return fmt.writer
-    return None
-
-
-def _log_scalar_info(writer, info, prefix, step):
-    """Write all scalar values from an info dict to TensorBoard."""
-    for key, value in info.items():
-        if isinstance(value, (int, float, np.integer, np.floating)):
-            writer.add_scalar(f"{prefix}/{key}", value, step)
-
-
-class TensorboardCallback(BaseCallback):
-    """Callback to log custom metrics from environment info to Tensorboard."""
-
-    def __init__(self, verbose: int = 0):
-        super().__init__(verbose)
-        self._tb_writer = None
-
-    def _on_step(self) -> bool:
-        try:
-            if self._tb_writer is None:
-                self._tb_writer = _get_tb_writer(self.logger)
-            if self._tb_writer is None:
-                return True
-
-            infos = self.locals.get("infos")
-            if infos:
-                for i, info in enumerate(infos):
-                    _log_scalar_info(
-                        self._tb_writer, info, f"env_{i}", self.num_timesteps
-                    )
-        except Exception as e:
-            print(f"Error in TensorboardCallback: {e}")
-
-        return True
-
-
-class LoggingEvalCallback(EvalCallback):
-    """EvalCallback that also logs per-step eval info metrics to TensorBoard."""
-
-    def __init__(self, *args, eval_on_start: bool = True, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._eval_step_count = 0
-        self._tb_writer = None
-        self._eval_on_start = eval_on_start
-
-    def _on_training_start(self):
-        """Run an evaluation at the very start (fresh model only)."""
-        super()._on_training_start()
-        if self._eval_on_start:
-            self._on_step()
-
-    def _log_success_callback(self, locals_, globals_):
-        super()._log_success_callback(locals_, globals_)
-        try:
-            if self._tb_writer is None:
-                self._tb_writer = _get_tb_writer(self.logger)
-            if self._tb_writer is None:
-                return
-            info = locals_.get("info")
-            if info:
-                _log_scalar_info(self._tb_writer, info, "eval", self._eval_step_count)
-            self._eval_step_count += 1
-        except Exception as e:
-            print(f"Error in LoggingEvalCallback: {e}")
 
 
 def train(config: TrainConfig, checkpoint: str = None):
@@ -271,7 +132,7 @@ def train(config: TrainConfig, checkpoint: str = None):
             n_eval_episodes=config.n_eval_episodes,
             eval_on_start=not checkpoint,
         ),
-        TensorboardCallback(),
+        LoggingTrainCallback(),
     ]
 
     # Add timing callback if benchmarking
