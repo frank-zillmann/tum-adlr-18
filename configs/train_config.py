@@ -15,7 +15,7 @@ class TrainConfig:
     reconstruction_metric: str = field()  # 'chamfer_distance' or 'voxelwise_tsdf_error'
 
     # Robot Environment
-    horizon: int = 40
+    horizon: int = 32
     control_freq: int = 4
     camera_height: int = 128
     camera_width: int = 128
@@ -31,7 +31,7 @@ class TrainConfig:
     bbox_padding: float = 0.05
 
     reward_scale: float = 1.0
-    characteristic_error: float = 1.0 / 40  # expected error decrease per step
+    characteristic_error: float = 1.0 / 32  # expected error decrease per step
     reward_mode: str = "delta"  # "exponential" or "delta"
     action_penalty_scale: float = 0.1
 

@@ -22,7 +22,7 @@ class CameraPoseHistoryExtractor(BaseFeaturesExtractor):
         d_model: int = 64,
         n_heads: int = 4,
         n_layers: int = 1,
-        max_steps: int = 40,
+        max_steps: int = 32,
     ):
         super().__init__(observation_space, features_dim)
         pose_dim = observation_space["camera_pose_history"].shape[-1]  # 7

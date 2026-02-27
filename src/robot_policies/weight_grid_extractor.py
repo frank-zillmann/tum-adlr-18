@@ -27,9 +27,11 @@ class WeightGridExtractor(BaseFeaturesExtractor):
         self,
         observation_space: gym.spaces.Dict,
         features_dim: int,
+        grid_size: int = 32,
+        max_steps: int = 32,
     ):
         super().__init__(observation_space, features_dim)
-        self.grid_size = 32  # Hardcoded grid size for weight grid
+        self.grid_size = grid_size
 
         # 3D CNN for weight grid (1 channel)
         # Input: (batch, 1, 32, 32, 32)
@@ -70,11 +72,10 @@ class WeightGridExtractor(BaseFeaturesExtractor):
                 align_corners=False,
             )
 
-        # Normalize weights (typically counts, can vary widely)
-        # Use log scaling for weights to handle varying magnitudes
+        # Use ln(1+x) scaling for weights 
         weight_normalized = (
-            torch.log1p(weight_grid) / torch.log1p(torch.tensor(40.0))
-        )  # log1p for numerical stability
+            torch.log1p(weight_grid) / torch.log1p(torch.tensor(32.0))
+        )
 
         return self.cnn3d(weight_normalized)
 
