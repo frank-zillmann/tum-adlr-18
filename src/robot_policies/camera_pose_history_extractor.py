@@ -33,7 +33,7 @@ class CameraPoseHistoryExtractor(BaseFeaturesExtractor):
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=n_heads,
-            dim_feedforward=d_model * 2,
+            dim_feedforward=d_model * 4,
             dropout=0.0,
             batch_first=True,
         )
