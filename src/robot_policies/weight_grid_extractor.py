@@ -46,9 +46,9 @@ class WeightGridExtractor(BaseFeaturesExtractor):
             nn.Conv3d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.BatchNorm3d(64),
             nn.ReLU(),
-            # Flatten: 64 * 4^3 = 4096
+            nn.AdaptiveAvgPool3d((2, 2, 2)),  # -> 64x2x2x2 = 512
             nn.Flatten(),
-            nn.Linear(64 * 4 * 4 * 4, features_dim),
+            nn.Linear(64 * 2 * 2 * 2, features_dim),
             nn.ReLU(),
         )
 

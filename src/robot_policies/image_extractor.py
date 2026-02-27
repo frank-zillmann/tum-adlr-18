@@ -51,11 +51,12 @@ class ImageExtractor(BaseFeaturesExtractor):
             nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),  # -> 32x16x16
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # -> 64x8x8 = 4096
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # -> 64x8x8
             nn.BatchNorm2d(64),
             nn.ReLU(),
+            nn.AdaptiveAvgPool2d((2, 2)),  # -> 64x2x2 = 256
             nn.Flatten(),
-            nn.Linear(64 * 8 * 8, features_dim),
+            nn.Linear(64 * 2 * 2, features_dim),
             nn.ReLU(),
         )
 
