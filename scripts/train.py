@@ -132,7 +132,7 @@ def train(config: TrainConfig, checkpoint: str = None):
             n_eval_episodes=config.n_eval_episodes,
             eval_on_start=not checkpoint,
         ),
-        LoggingTrainCallback(),
+        # LoggingTrainCallback(), # enable for debugging / disable to save some memory in TensorBoard
     ]
 
     # Add timing callback if benchmarking
