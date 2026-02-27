@@ -40,13 +40,12 @@ class TrainConfig:
     hidden_dims: List[int] = field(default_factory=lambda: [256, 256])
 
     # PPO and training
-    total_timesteps: int = 1_000_000
-    # TODO: test effect of larger n_envs on speed
-    n_envs: int = 2  # Number of parallel environments
-    lr: float = 2e-4  # Learning rate
-    n_steps: int = 2048  # Steps per env before update
+    total_timesteps: int = 500_000
+    n_envs: int = 4  # Number of parallel environments
+    lr: float = 3e-4  # Learning rate
+    n_steps: int = 1024  # Steps per env before update
     batch_size: int = 64  # Minibatch size for gradient updates
-    n_epochs: int = 5  # Passes over rollout buffer per update, PPO default is 10
+    n_epochs: int = 10  # Passes over rollout buffer per update, PPO default is 10
     gamma: float = 0.98  # Discount factor, PPO default is 0.99
     gae_lambda: float = 0.95  # GAE lambda for advantage estimation
     clip_range: float = 0.2  # PPO clipping parameter
@@ -55,7 +54,7 @@ class TrainConfig:
 
     checkpoint_freq: int = 50_000
     eval_freq: int = 50_000
-    n_eval_episodes: int = 20
+    n_eval_episodes: int = 10
 
     # Logging
     log_dir: str = "data/logs"
