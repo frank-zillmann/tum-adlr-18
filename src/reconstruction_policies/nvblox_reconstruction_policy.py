@@ -179,7 +179,6 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         # Extract SDF values and weights
         sdf_values = tsdf_result[:, 0].cpu().numpy()
         weights = tsdf_result[:, 1].cpu().numpy()
-        # TODO: Maybe later optimize further to avoid CPU-GPU transfer and doing reward computation on GPU
 
         # print(
         #     f"TSDF stats: weight=0 voxels: {(weights == 0).sum()}, truncated voxels: {(np.abs(sdf_values) >= self.sdf_trunc).sum()}, sdf>99 voxels: {(sdf_values >= 99.0).sum()}"

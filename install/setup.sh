@@ -17,7 +17,7 @@ conda activate $ENV_NAME
 echo ""
 # Detect CUDA
 if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
-    #TODO: Check if it is okay to use CUDA 12.4 here also the image is pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570
+    #TODO: Check if it is okay to use CUDA 12.4 here although the image is pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570
     echo "CUDA detected - installing PyTorch with CUDA 12.4 support"
     PYTORCH_PACKAGES="pytorch torchvision pytorch-cuda=12.4 -c pytorch -c nvidia"
 else

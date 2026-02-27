@@ -37,11 +37,12 @@ class TrainConfig:
 
     # Network
     features_dim: int = 256
-    hidden_dims: List[int] = field(default_factory=lambda: [128, 64])
+    hidden_dims: List[int] = field(default_factory=lambda: [256, 256])
 
     # PPO and training
     total_timesteps: int = 1_000_000
-    n_envs: int = 1  # Number of parallel environments
+    # TODO: test effect of larger n_envs on speed
+    n_envs: int = 2  # Number of parallel environments
     lr: float = 2e-4  # Learning rate
     n_steps: int = 2048  # Steps per env before update
     batch_size: int = 64  # Minibatch size for gradient updates
