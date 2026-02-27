@@ -40,16 +40,16 @@ class TrainConfig:
     hidden_dims: List[int] = field(default_factory=lambda: [256, 256])
 
     # PPO and training
-    total_timesteps: int = 500_000
-    n_envs: int = 4  # Number of parallel environments
+    total_timesteps: int = 2_000_000
+    n_envs: int = 4  # Number of parallel environments, PPO default is 1
     lr: float = 3e-4  # Learning rate
-    n_steps: int = 1024  # Steps per env before update
-    batch_size: int = 64  # Minibatch size for gradient updates
-    n_epochs: int = 10  # Passes over rollout buffer per update, PPO default is 10
+    n_steps: int = 512  # Steps per env before update
+    batch_size: int = 128  # Minibatch size for gradient updates, PPO default is 64
+    n_epochs: int = 5  # Passes over rollout buffer per update, PPO default is 10
     gamma: float = 0.98  # Discount factor, PPO default is 0.99
     gae_lambda: float = 0.95  # GAE lambda for advantage estimation
     clip_range: float = 0.2  # PPO clipping parameter
-    ent_coef: float = 0.01  # Entropy bonus for exploration
+    ent_coef: float = 0.01  # Entropy bonus for exploration, PPO default is 0.0
     seed: int = 0  # Random seed for PPO (not for envs)
 
     checkpoint_freq: int = 50_000
