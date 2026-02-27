@@ -203,17 +203,15 @@ class Reconstruct3DGymWrapper(gym.Env):
 
         # print(f"Using controller config: {controller_config}")
 
-        # Always include birdview for reconstruction rendering
-        # TODO: try to remove birdview camera in train mode as only extrinsic and intrinsic but not the simulation renderings are needed
         if self.eval_mode:
             self.camera_names = [
                 "robot0_eye_in_hand",
                 "birdview",
                 "frontview",
                 # "sideview",
-            ]
+            ] # multiple views for better saved eval visualization
         else:
-            self.camera_names = ["robot0_eye_in_hand", "birdview"]
+            self.camera_names = ["robot0_eye_in_hand"] # for performance
 
         self.robot_env = robosuite.make(
             env_name="Reconstruct3D",
