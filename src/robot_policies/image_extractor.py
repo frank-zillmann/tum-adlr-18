@@ -1,7 +1,7 @@
 """Image feature extractor for Stable Baselines 3."""
 
 from typing import Dict, List, Optional
-
+import numpy as np
 import torch
 import torch.nn as nn
 import gymnasium as gym
@@ -43,20 +43,24 @@ class ImageExtractor(BaseFeaturesExtractor):
             for k in image_keys
         )
 
+        ch1 = min(8 * in_channels, 16)
+        ch2 = min(16 * in_channels, 32)
+        ch3 = min(32 * in_channels, 64)
+
         # CNN: (in_channels, 64, 64) -> features
         self.cnn = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=3, stride=2, padding=1),  # -> 16x32x32
-            nn.BatchNorm2d(16),
+            nn.Conv2d(in_channels, ch1, kernel_size=3, stride=2, padding=1),  # -> ch1 x 32x32
+            nn.BatchNorm2d(ch1),
             nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),  # -> 32x16x16
-            nn.BatchNorm2d(32),
+            nn.Conv2d(ch1, ch2, kernel_size=3, stride=2, padding=1),  # -> ch2 x 16x16
+            nn.BatchNorm2d(ch2),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # -> 64x8x8
-            nn.BatchNorm2d(64),
+            nn.Conv2d(ch2, ch3, kernel_size=3, stride=2, padding=1),  # -> 64x8x8
+            nn.BatchNorm2d(ch3),
             nn.ReLU(),
             nn.AdaptiveAvgPool2d((2, 2)),  # -> 64x2x2 = 256
             nn.Flatten(),
-            nn.Linear(64 * 2 * 2, features_dim),
+            nn.Linear(ch3 * 2 * 2, features_dim),
             nn.ReLU(),
         )
 
