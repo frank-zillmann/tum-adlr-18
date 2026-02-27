@@ -35,20 +35,20 @@ class WeightGridExtractor(BaseFeaturesExtractor):
         # Input: (batch, 1, 32, 32, 32)
         self.cnn3d = nn.Sequential(
             # Layer 1: 32^3 -> 16^3
-            nn.Conv3d(1, 16, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm3d(16),
+            nn.Conv3d(1, 8, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm3d(8),
             nn.ReLU(),
             # Layer 2: 16^3 -> 8^3
+            nn.Conv3d(8, 16, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm3d(16),
+            nn.ReLU(),
+            # Layer 3: 8^3 -> 4^3
             nn.Conv3d(16, 32, kernel_size=3, stride=2, padding=1),
             nn.BatchNorm3d(32),
             nn.ReLU(),
-            # Layer 3: 8^3 -> 4^3
-            nn.Conv3d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm3d(64),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool3d((2, 2, 2)),  # -> 64x2x2x2 = 512
+            nn.AdaptiveAvgPool3d((2, 2, 2)),  # -> 32x2x2x2 = 256
             nn.Flatten(),
-            nn.Linear(64 * 2 * 2 * 2, features_dim),
+            nn.Linear(32 * 2 * 2 * 2, features_dim),
             nn.ReLU(),
         )
 
