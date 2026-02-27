@@ -5,4 +5,5 @@ observations:
 #  - camera_pose
   - camera_pose_history
   - mesh_render
+  - birdview_image  # simulation RGB from birdview (concat with mesh_render)
   - weight_grid

@@ -19,7 +19,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from src.robot_policies import (
     CameraPoseExtractor,
     CameraPoseHistoryExtractor,
-    MeshRenderingExtractor,
+    ImageExtractor,
     WeightGridExtractor,
     CombinedExtractor,
 )
@@ -207,8 +207,11 @@ def train(config: TrainConfig, checkpoint: str = None):
                 },
             )
         )
-    if "mesh_render" in config.observations:
-        extractors_config.append((MeshRenderingExtractor, {"features_dim": 128}))
+    if "mesh_render" in config.observations or "birdview_image" in config.observations:
+        image_keys = [k for k in config.observations if k in ("mesh_render", "birdview_image")]
+        extractors_config.append(
+            (ImageExtractor, {"features_dim": 128, "image_keys": image_keys})
+        )
     if "sdf_grid" in config.observations:
         # TODO: Add SdfGridExtractor when implemented
         print(

@@ -213,6 +213,10 @@ class Reconstruct3DGymWrapper(gym.Env):
         else:
             self.camera_names = ["robot0_eye_in_hand"] # for performance
 
+        # Ensure birdview camera renders images when birdview_image observation is used
+        if "birdview_image" in self.observations and "birdview" not in self.camera_names:
+            self.camera_names.append("birdview")
+
         self.robot_env = robosuite.make(
             env_name="Reconstruct3D",
             robots="Panda",
@@ -245,6 +249,13 @@ class Reconstruct3DGymWrapper(gym.Env):
                 low=0.0,
                 high=1.0,
                 shape=(1, *self.render_resolution),
+                dtype=np.float32,
+            )
+        if "birdview_image" in self.observations:
+            obs_space_dict["birdview_image"] = spaces.Box(
+                low=0.0,
+                high=1.0,
+                shape=(3, *self.render_resolution),
                 dtype=np.float32,
             )
         if "sdf_grid" in self.observations:
@@ -298,13 +309,15 @@ class Reconstruct3DGymWrapper(gym.Env):
         return pose_7d
 
     def _get_obs(
-        self, mesh=None, sdf_grid=None, weight_grid=None
+        self, mesh=None, sdf_grid=None, weight_grid=None, obs_dict=None
     ) -> Dict[str, np.ndarray]:
         """Get current observation (camera pose + reconstruction render + optional SDF/weights).
 
         Args:
-            reconstruction: Tuple of (vertices, faces) for mesh rendering
-            sdf_reconstruction: Optional tuple of (sdf_grid, weight_grid) for SDF observations
+            mesh: Tuple of (vertices, faces) for mesh rendering
+            sdf_grid: SDF grid for SDF observations
+            weight_grid: Weight grid for weight observations
+            obs_dict: Raw robosuite observation dict (needed for birdview_render)
         """
         obs = {}
 
@@ -342,6 +355,13 @@ class Reconstruct3DGymWrapper(gym.Env):
                 grayscale=True,
             )
             obs["mesh_render"] = render[np.newaxis, :, :].astype(np.float32)
+
+        if "birdview_image" in self.observation_space.spaces:
+            birdview_rgb = obs_dict["birdview_image"]
+            # robosuite returns (H, W, 3) uint8 -> (3, H, W) float32 in [0, 1]
+            obs["birdview_image"] = (
+                birdview_rgb.transpose(2, 0, 1).astype(np.float32) / 255.0
+            )
 
         if sdf_grid is not None:
             obs["sdf_grid"] = sdf_grid.reshape(
@@ -499,6 +519,7 @@ class Reconstruct3DGymWrapper(gym.Env):
                     and tsdf_reconstruction is not None
                     else None
                 ),
+                obs_dict=obs_dict,
             )
 
         return obs, reward, reward_info_dict
