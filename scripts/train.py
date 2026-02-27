@@ -202,7 +202,7 @@ def train(config: TrainConfig, checkpoint: str = None):
                     "features_dim": 64,
                     "d_model": 64,
                     "n_heads": 4,
-                    "n_layers": 2,
+                    "n_layers": 1,
                     "max_steps": config.horizon,
                 },
             )

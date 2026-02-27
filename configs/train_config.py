@@ -49,7 +49,7 @@ class TrainConfig:
     gamma: float = 0.98  # Discount factor, PPO default is 0.99
     gae_lambda: float = 0.95  # GAE lambda for advantage estimation
     clip_range: float = 0.2  # PPO clipping parameter
-    ent_coef: float = 0.00  # Entropy bonus for exploration
+    ent_coef: float = 0.01  # Entropy bonus for exploration
     seed: int = 0  # Random seed for PPO (not for envs)
 
     checkpoint_freq: int = 50_000

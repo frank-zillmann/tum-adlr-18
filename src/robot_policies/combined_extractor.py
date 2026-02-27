@@ -50,6 +50,8 @@ class CombinedExtractor(BaseFeaturesExtractor):
         self.combine = nn.Sequential(
             nn.Linear(total_features, features_dim),
             nn.ReLU(),
+            nn.Linear(features_dim, features_dim),
+            nn.ReLU(),
         )
 
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:

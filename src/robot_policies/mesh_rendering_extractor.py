@@ -29,10 +29,13 @@ class MeshRenderingExtractor(BaseFeaturesExtractor):
         # CNN for reconstruction render (1, 64, 64) -> features
         self.cnn = nn.Sequential(
             nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),  # -> 16x32x32
+            nn.BatchNorm2d(16),
             nn.ReLU(),
             nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),  # -> 32x16x16
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # -> 64x8x8 = 4096
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(64*8*8, features_dim),
