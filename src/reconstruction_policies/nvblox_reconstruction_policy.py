@@ -29,7 +29,21 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         self._cached_query_params = None
         self._cached_query_tensor = None
 
-        self.reset()
+        # Create the mapper
+        mapper_params = MapperParams()
+        integrator_params = mapper_params.get_projective_integrator_params()
+        integrator_params.projective_integrator_truncation_distance_vox = (
+            self.trunc_voxels
+        )
+        integrator_params.projective_integrator_max_integration_distance_m = (
+            self.depth_max
+        )
+        mapper_params.set_projective_integrator_params(integrator_params)
+
+        self.nvblox_mapper = Mapper(
+            voxel_sizes_m=self.voxel_size,
+            mapper_parameters=mapper_params,
+        )
 
     def add_obs(
         self,
@@ -210,20 +224,5 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         return sdf_grid, weights_grid
 
     def reset(self, **kwargs):
-        # Create mapper params and set truncation distance
-        mapper_params = MapperParams()
-        integrator_params = mapper_params.get_projective_integrator_params()
-        integrator_params.projective_integrator_truncation_distance_vox = (
-            self.trunc_voxels
-        )
-        # Limit integration distance to avoid allocating blocks for far-away depth (background/sky)
-        # This prevents "IndexSet is too large" errors and improves performance.
-        integrator_params.projective_integrator_max_integration_distance_m = (
-            self.depth_max
-        )
-        mapper_params.set_projective_integrator_params(integrator_params)
-
-        self.nvblox_mapper = Mapper(
-            voxel_sizes_m=self.voxel_size,
-            mapper_parameters=mapper_params,
-        )
+        # Clear voxel data in-place instead of creating a new Mapper to avoid GPU memory leak
+        self.nvblox_mapper.clear()
