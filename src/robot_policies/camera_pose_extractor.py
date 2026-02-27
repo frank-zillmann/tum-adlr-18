@@ -38,5 +38,11 @@ class CameraPoseExtractor(BaseFeaturesExtractor):
 
         self.net = nn.Sequential(*layers)
 
+        n_params = sum(p.numel() for p in self.parameters())
+        print(
+            f"[CameraPoseExtractor] input_dim={input_dim}, hidden_dims={hidden_dims}, "
+            f"features_dim={features_dim} | {n_params:,} params"
+        )
+
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:
         return self.net(observations["camera_pose"])

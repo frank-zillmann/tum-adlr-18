@@ -40,6 +40,13 @@ class CameraPoseHistoryExtractor(BaseFeaturesExtractor):
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         self.output_proj = nn.Sequential(nn.Linear(d_model, features_dim), nn.ReLU())
 
+        n_params = sum(p.numel() for p in self.parameters())
+        print(
+            f"[CameraPoseHistoryExtractor] d_model={d_model}, n_heads={n_heads}, "
+            f"n_layers={n_layers}, dim_ff={d_model * 4}, max_steps={max_steps}, "
+            f"features_dim={features_dim} | {n_params:,} params"
+        )
+
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:
         poses = observations["camera_pose_history"]  # (B, T, 7)
         B, T, _ = poses.shape

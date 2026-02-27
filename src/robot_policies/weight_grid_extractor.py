@@ -52,6 +52,12 @@ class WeightGridExtractor(BaseFeaturesExtractor):
             nn.ReLU(),
         )
 
+        n_params = sum(p.numel() for p in self.parameters())
+        print(
+            f"[WeightGridExtractor] grid_size={self.grid_size}, "
+            f"features_dim={features_dim} | {n_params:,} params"
+        )
+
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:
         weight_grid = observations["weight_grid"]
 

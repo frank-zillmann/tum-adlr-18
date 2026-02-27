@@ -43,10 +43,6 @@ class ImageExtractor(BaseFeaturesExtractor):
             for k in image_keys
         )
 
-        print(
-            f"ImageExtractor: using keys {image_keys} with total {in_channels} channels"
-        )
-
         # CNN: (in_channels, 64, 64) -> features
         self.cnn = nn.Sequential(
             nn.Conv2d(in_channels, 16, kernel_size=3, stride=2, padding=1),  # -> 16x32x32
@@ -61,6 +57,12 @@ class ImageExtractor(BaseFeaturesExtractor):
             nn.Flatten(),
             nn.Linear(64 * 8 * 8, features_dim),
             nn.ReLU(),
+        )
+
+        n_params = sum(p.numel() for p in self.parameters())
+        print(
+            f"[ImageExtractor] image_keys={image_keys}, in_channels={in_channels}, "
+            f"features_dim={features_dim} | {n_params:,} params"
         )
 
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:

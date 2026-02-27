@@ -52,6 +52,13 @@ class CombinedExtractor(BaseFeaturesExtractor):
             nn.ReLU(),
         )
 
+        n_params = sum(p.numel() for p in self.parameters())
+        print(
+            f"[CombinedExtractor] {len(extractors_config)} sub-extractors, "
+            f"total_features={total_features} -> features_dim={features_dim} | "
+            f"{n_params:,} total params"
+        )
+
     def forward(self, observations: Dict[str, torch.Tensor]) -> torch.Tensor:
         # Extract features from each sub-extractor
         features_list = []
