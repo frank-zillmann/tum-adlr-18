@@ -5,6 +5,8 @@ import os
 # Must be set before importing nvblox_torch or any library using glog
 os.environ["GLOG_minloglevel"] = "1"
 
+import gc
+
 import numpy as np
 import torch
 from src.reconstruction_policies.base import BaseReconstructionPolicy
@@ -29,7 +31,16 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         self._cached_query_params = None
         self._cached_query_tensor = None
 
-        # Create the mapper
+        # Store mapper params for recreation on reset
+        self._mapper_params = self._create_mapper_params()
+
+        self.nvblox_mapper = Mapper(
+            voxel_sizes_m=self.voxel_size,
+            mapper_parameters=self._mapper_params,
+        )
+
+    def _create_mapper_params(self):
+        """Create mapper params (reused on every reset)."""
         mapper_params = MapperParams()
         integrator_params = mapper_params.get_projective_integrator_params()
         integrator_params.projective_integrator_truncation_distance_vox = (
@@ -39,11 +50,7 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
             self.depth_max
         )
         mapper_params.set_projective_integrator_params(integrator_params)
-
-        self.nvblox_mapper = Mapper(
-            voxel_sizes_m=self.voxel_size,
-            mapper_parameters=mapper_params,
-        )
+        return mapper_params
 
     def add_obs(
         self,
@@ -224,5 +231,14 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         return sdf_grid, weights_grid
 
     def reset(self, **kwargs):
-        # Clear voxel data in-place instead of creating a new Mapper to avoid GPU memory leak
-        self.nvblox_mapper.clear()
+        # Destroy old mapper first, force GC to run the C++ destructor, and
+        # synchronize the GPU so all async cudaFreeAsync calls complete 
+        # This prevents two Mappers from coexisting on the GPU
+        del self.nvblox_mapper
+        gc.collect()
+        torch.cuda.synchronize()
+
+        self.nvblox_mapper = Mapper(
+            voxel_sizes_m=self.voxel_size,
+            mapper_parameters=self._mapper_params,
+        )
