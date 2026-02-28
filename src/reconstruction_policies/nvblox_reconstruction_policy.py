@@ -231,9 +231,8 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         return sdf_grid, weights_grid
 
     def reset(self, **kwargs):
-        # Destroy old mapper first, force GC to run the C++ destructor, and
-        # synchronize the GPU so all async cudaFreeAsync calls complete 
-        # This prevents two Mappers from coexisting on the GPU
+        # Try to free all resources: clear voxel data, then destroy mapper, force GC, synchronize GPU, then recreate
+        self.nvblox_mapper.clear()
         del self.nvblox_mapper
         gc.collect()
         torch.cuda.synchronize()
