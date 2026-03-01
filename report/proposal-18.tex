@@ -1,0 +1,141 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+%Template version as of 6/27/2024
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% Added manually:
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+\usepackage{hyperref}
+    
+\begin{document}
+
+\title{ADLR-Project 18: Efficient Environment Exploration and 3D Reconstruction with Reinforcement Learning and Multiple View Geometry}
+
+% 1\textsuperscript{st} % could be used for 1.
+\author{\IEEEauthorblockN{Frank Zillmann}
+\IEEEauthorblockA{\textit{Department of Computer Engineering} \\
+\textit{Technical University of Munich (TUM)}\\
+Munich, Germany \\
+frank.zillmann@tum.de}
+}
+
+\maketitle
+
+% \begin{abstract}
+% This document is a model and instructions for \LaTeX.
+% This and the IEEEtran.cls file define the components of your paper [title, text, heads, etc.]. *CRITICAL: Do Not Use Symbols, Special Characters, Footnotes, 
+% or Math in Paper Title or Abstract.
+% \end{abstract}
+
+% \begin{IEEEkeywords}
+% component, formatting, style, styling, insert.
+% \end{IEEEkeywords}
+
+\begin{figure}[t]
+\caption{Overview of Architecture/Train Setup}
+\label{fig:architecture}
+\begin{center}
+\begin{tikzpicture}[
+    node distance=1cm,       % vertical distance between nodes
+    box/.style={draw, rounded corners, thick, align=center, minimum width=3cm, minimum height=1cm},
+    ->,                       % default arrow style
+    >=Stealth                 % arrowhead style
+]
+% Define the nodes
+\node[box, text width=6cm, align=justify] (A) {%
+\textbf{Trajectory Policy (RL/trained)}\\[2pt]
+\textit{Input:} Proprioception + optionally: hand-local or (auto)encoded 3D reconstruction, uncertainty measure of 3D reconstruction, last image \\[2pt]
+\textit{Output:} Trajectory (velocities or positions), + optionally: image request / end indicator\\[2pt]
+\textit{Architecture:} Fully connected, MLP with 2-4 layers inferred at 5-25 Hz
+};
+
+\node[box, below=of A, text width=6cm, align=justify] (B) {%
+\textbf{3D reconstruction (classical/existing)}\\[2pt]
+\textit{Input:} Collection of all taken images + camera poses (+ last prediction) \\[2pt]
+\textit{Output:} New 3D reconstruction \\[2pt]
+\textit{Policy:} Classic Multiple View Geometry method from \autoref{tab:mvg_methods_overview}
+};
+
+% Draw the arrow
+\draw[<->, thick] (A) -- (B);
+
+\end{tikzpicture}
+\end{center}
+\end{figure}
+
+\section{Objective}
+
+The goal is to develop a policy capable of autonomously exploring the workspace within a robot arm’s reach and producing a 3D reconstruction, such as a \textit{(Truncated) Signed Distance Field (TSDF)} that can be used for further applications such as collision checking or trajectory optimization.
+The robot arm is mounted vertically on a table with several obstacles placed within its reach. With a camera at the hand, the policy should explore the workspace. As input, the policy can get proprioceptive data - such as the positions/angles and velocities of the joints or the camera -, the rendered images of the camera. As output, it should provide an accurate 3D reconstruction with respect to the robot's base.
+The policy should learn to avoid collisions, remain computationally efficient, and generalize robustly to unseen environments. Therefore, I will combine a lightweight Trajectory Policy trained with Reinforcement Learning with a classical approach from Multiple View Geometry (not trained on shape datasets).
+
+\section{Related Work}
+Sharing Meli's and Dehio's interest in getting a precise model of the fixed obstacles in a robot arm's reach i.e. a cell model with low effort \cite{meli2025robotcellmodelingexploratory}, I want to automate the exploration process.
+
+The literature research for the selection of a suitable 3D reconstruction method has shown a variety of suitable methods.
+\begin{table}[h]
+\caption{Comparison of Multi View 3D Reconstruction Methods}
+\centering
+\label{tab:mvg_methods_overview}
+\footnotesize
+\setlength{\tabcolsep}{2pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{|p{1.7cm}|p{0.8cm}|p{1.0cm}|p{1.3cm}|p{0.8cm}|p{1.4cm}|p{0.9cm}|}
+\hline
+\textbf{Method} & \textbf{Uses Poses} & \textbf{Uses Depth} & \textbf{Output} & \textbf{Online} & \textbf{Uncertainty} & \textbf{Time} \\
+\hline
+Liao~\cite{Liao_2024_WACV} & Yes & No & Neural SDF & Partial & Latent variance & minutes \\
+% \hline
+% UNIKD~\cite{Guo_2024_UNIKD} & Yes & No & Neural field & \checkmark & Dropout, ensemble & minutes \\
+\hline
+SparseCraft~\cite{Younes_2024_SparseCraft} & Yes & No & Neural SDF+color & -- & Photometric residuals & minutes \\
+\hline
+COLMAP~\cite{schoenberger2016mvs} & Yes/No & Optional & Point cloud & Yes & Reprojection error & seconds \\
+\hline
+TSDF Fusion~\cite{curless1996volumetric} & Yes & Yes & Voxel TSDF & Yes & Voxel observation count & 0.5--2\,s \\
+\hline
+Open3D TSDF~\cite{zhou2018open3d} & Yes & Yes & TSDF + mesh & Yes & Weight map & $<$1\,s \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+Many modern approaches use \textit{Neural Fields} for \textit{SDF} or other \textit{occupancy maps} \cite{Liao_2024_WACV, Guo_2024_UNIKD, Younes_2024_SparseCraft}. While these methods yield high quality outputs and can provide uncertainty measures \cite{Liao_2024_WACV}, they are relatively slow (often 5--30 minutes compute per scene), and therefore unsuitable for most RL methods. They could, however, serve as a potential post-training enhancement to replace a simpler reconstruction method.
+
+Therefore, classical multiple view geometry approaches will be used. Specifically, \textit{Open3D}'s \cite{zhou2018open3d} \textit{TSDF} method will be the first choice due its quick inference (C++), good documentation, and suitable output formats as \textit{TSDF} (\textit{SDF} but clipped at positive and negative threshold) and optionally mesh (via marching cubes).
+\textit{COLMAP} \cite{schoenberger2016mvs}, might be an alternative as it does not necessarily need depth information and the reprojection error provides a well interpretable uncertainty estimate.
+
+\section{Technical Outline}
+
+First, I will familiarize myself with the software components used — \textit{robosuite}, \textit{MuJoCo}, and \textit{Stable Baselines 3} — to ensure proper integration.
+
+As a first coding task, the described environment will be added to \textit{robosuite} and needs to be verified via some camera renderings and a dummy policy.
+A ground truth can be constructed with existing Mesh to \textit{SDF} methods \cite{marian42_mesh_to_sdf}.
+
+Next, the proposed policy, its architecture, and the training algorithm will be implemented according to \autoref{fig:architecture}. Specifically, the trajectory policy will be designed using \textit{pytorch} and both it and the 3D reconstruction method need to be integrated in the training pipeline and \textit{robosuite}. 
+In the beginning, the Trajectory Policy policy will be kept simple, using little data (proprioception + few extra information) and only a few fully connected layers. Depending on the outcome of the few experiments, this leaves room for later iterations to provide richer input information e.g. the last image, uncertainty estimates, etc. and adapt the architecture of the neural network to better fit the problem e.g. convolutions, residual connections, etc.
+
+Furthermore, a loss function for the predicted 3D reconstruction needs to be implemented and a reward function will be designed using it. The reward function will be based on the difference between the predicted 3D reconstruction and the ground truth of the environment, combined with large penalties for collisions and smaller penalties for factors such as joint torques or number of image renderings.
+
+Finally, initial training runs will employ \textit{Proximal Policy Optimization} \cite{schulman2017proximalpolicyoptimizationalgorithms} as baseline, with the option to switch in case of need for more sample efficiency due to performance issues. 
+
+Further ideas / extensions:
+\begin{itemize}
+    \item In addition to the image input, one could render the currently predicted SDF (in some way) for the current camera position and orientation and provide that as an extra channel to the policy so that it gets the possibility to better compare between reality and the currently predicted SDF.
+    \item Instead of ground truth, one could use the uncertainty esitimates of the Multiple View Geometry Method in the reward function and study if and to what degree performance degrades.
+\end{itemize}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

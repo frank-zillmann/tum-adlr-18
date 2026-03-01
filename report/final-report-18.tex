@@ -51,11 +51,14 @@ Reconstructing the 3D geometry of an environment from a sequence of depth or RGB
 Classical multi-view geometry pipelines such as Structure-from-Motion~\cite{schoenberger2016sfm} and volumetric fusion~\cite{curless1996volumetric} assume that images are collected by a human operator or a pre-programmed scanning trajectory.
 In practice, the choice of viewpoints critically affects reconstruction quality: redundant views waste time while occluded regions remain unobserved.
 
-The \emph{next-best-view} (NBV) problem asks which camera pose should be selected next to maximally reduce reconstruction uncertainty.
-Traditional NBV methods rely on hand-crafted heuristics such as information gain or frontier-based exploration.
-Recently, learning-based approaches have emerged as a promising alternative, leveraging deep reinforcement learning (RL) to discover non-myopic viewpoint planning strategies directly from data~\cite{meli2025robotcellmodelingexploratory}.
+% The \emph{next-best-view} (NBV) problem asks which camera pose should be selected next to maximally reduce reconstruction uncertainty.
+% Traditional NBV methods rely on hand-crafted heuristics such as information gain or frontier-based exploration.
+% Recently, learning-based approaches have emerged as a promising alternative, leveraging deep reinforcement learning (RL) to discover non-myopic viewpoint planning strategies directly from data~\cite{meli2025robotcellmodelingexploratory}.
 
-In this work, we develop an end-to-end RL framework in which a simulated Franka Panda manipulator learns to move its wrist-mounted camera so as to maximize the reconstruction quality of a tabletop scene within a fixed episode horizon.
+Simultaneously, efficiently learning the 3D geometry of robot cells and workspaces to enable safe and effective operation is a critical capability for autonomous robots.
+While other approaches try to tackle this problem through involving a human operator in the loop \cite{meli2025robotcellmodelingexploratory}, fully autonomous exploration and reconstruction is desirable for scalability and efficiency in frequently changing environments such manufacturing floors or laboratories.
+
+In this work, a little framework was developed in which a simulated Franka Panda manipulator learns to move its wrist-mounted camera so as to maximize the reconstruction quality of a tabletop scene within a fixed episode horizon.
 Our contributions are as follows:
 \begin{itemize}
     \item A modular simulation environment built on robosuite~\cite{robosuite2020} and Gymnasium that couples physics-based robot control with incremental TSDF reconstruction.
