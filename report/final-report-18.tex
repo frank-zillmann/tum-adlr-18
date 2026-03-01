@@ -67,6 +67,13 @@ The main contributions are as follows:
     \item A training pipeline using PPO that allows flexibly choosing the reconstruction policy, reconstruction metric, observations, and other hyperparameters via an environment wrapper with a Gymnasium interface.
 \end{itemize}
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{episode_overview.png}
+\caption{Screenshot of a evaluation episode.}
+\label{fig:episode_overview}
+\end{figure}
+
 %======================================================================
 \section{Related Work}
 
@@ -247,8 +254,12 @@ This provides the policy with explicit spatial information about which parts of 
 The three sub-extractor outputs (dimensions 64, 128, 128) are concatenated into a 320-dimensional vector and projected to a 256-dimensional combined representation through a linear layer.
 The entire feature extraction front-end comprises 246\,288 trainable parameters.
 
-% Architecture image
-
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{robot_policy_architecture.png}
+\caption{Robot policy architecture.}
+\label{fig:policy_architecture}
+\end{figure}
 
 %----------------------------------------------------------------------
 \subsection{Training}
