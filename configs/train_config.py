@@ -52,8 +52,8 @@ class TrainConfig:
     ent_coef: float = 0.01  # Entropy bonus for exploration, PPO default is 0.0
     seed: int = 0  # Random seed for PPO (not for envs)
 
-    checkpoint_freq: int = 25_000 # every 100_000 steps, because n_envs=4
-    eval_freq: int = 25_000 # every 100_000 steps, because n_envs=4
+    checkpoint_freq: int = 12_500 # every 50_000 steps, because n_envs=4
+    eval_freq: int = 12_500 # every 50_000 steps, because n_envs=4
     n_eval_episodes: int = 10
 
     # Logging
