@@ -264,37 +264,37 @@ The entire feature extraction front-end comprises 246\,288 trainable parameters.
 %----------------------------------------------------------------------
 \subsection{Training}
 
-Training uses PPO with the hyperparameters listed in Table~\ref{tab:hyperparams}.
+Training uses PPO mostly with default parameters. The discount factor $\gamma$ was set to 0.98 to because of the rather short horizon and the entropy coefficient was set to 0.01 to encourage exploration.
 Four parallel environment instances are used for data collection, and a separate evaluation environment with deterministic seeding logs images, meshes, and rewards every 50\,000 steps.
 
-\begin{table}[t]
-\centering
-\caption{PPO Hyperparameters}
-\label{tab:hyperparams}
-\begin{tabular}{@{}ll@{}}
-\toprule
-Parameter & Value \\
-\midrule
-Horizon (steps/episode) & 32 \\
-Control frequency & 4\,Hz \\
-Parallel environments & 4 \\
-Rollout length ($n_\text{steps}$) & 512 per env \\
-Minibatch size & 128 \\
-Epochs per update & 5 \\
-Learning rate & $3 \times 10^{-4}$ \\
-Discount factor $\gamma$ & 0.98 \\
-GAE $\lambda$ & 0.95 \\
-Clip range & 0.2 \\
-Entropy coefficient & 0.01 \\
-Total timesteps & $2 \times 10^6$ \\
-Reward mode & delta \\
-Action penalty $\lambda$ & 0.1 \\
-Characteristic error $c$ & $1/32$ \\
-Camera resolution & $128 \times 128$ \\
-SDF grid resolution & $32^3$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+% \begin{table}[t]
+% \centering
+% \caption{PPO Hyperparameters}
+% \label{tab:hyperparams}
+% \begin{tabular}{@{}ll@{}}
+% \toprule
+% Parameter & Value \\
+% \midrule
+% Horizon (steps/episode) & 32 \\
+% Control frequency & 4\,Hz \\
+% Parallel environments & 4 \\
+% Rollout length ($n_\text{steps}$) & 512 per env \\
+% Minibatch size & 128 \\
+% Epochs per update & 5 \\
+% Learning rate & $3 \times 10^{-4}$ \\
+% Discount factor $\gamma$ & 0.98 \\
+% GAE $\lambda$ & 0.95 \\
+% Clip range & 0.2 \\
+% Entropy coefficient & 0.01 \\
+% Total timesteps & $2 \times 10^6$ \\
+% Reward mode & delta \\
+% Action penalty $\lambda$ & 0.1 \\
+% Characteristic error $c$ & $1/32$ \\
+% Camera resolution & $128 \times 128$ \\
+% SDF grid resolution & $32^3$ \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
 
 %======================================================================
 \section{Results and Discussion}
