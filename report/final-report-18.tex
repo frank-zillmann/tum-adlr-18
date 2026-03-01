@@ -167,7 +167,6 @@ A Gymnasium-compatible wrapper couples the first two into a single RL environmen
 
 %----------------------------------------------------------------------
 \subsection{Robot Environment}
-%----------------------------------------------------------------------
 
 The environment is built on robosuite~\cite{robosuite2020} with MuJoCo physics.
 A Franka Panda 7-DoF manipulator is placed in front of a table ($1.0 \times 1.0$\,m) on which 4 primitive objects (boxes and cylinders of randomized sizes in $[0.05, 0.2]$\,m) are placed at random positions and orientations at each episode reset.
@@ -185,7 +184,6 @@ For the voxel-wise TSDF metric, the ground-truth SDF is additionally computed on
 
 %----------------------------------------------------------------------
 \subsection{Reconstruction Policy}
-%----------------------------------------------------------------------
 
 At every simulation step, the wrapper extracts the wrist camera's depth image, intrinsic matrix, and extrinsic pose, and passes them to the reconstruction policy's \texttt{add\_obs} method.
 Two reconstruction policies are supported:
@@ -204,13 +202,12 @@ Default parameters are a voxel size of 0.01\,m, a truncation distance of 0.04\,m
 %----------------------------------------------------------------------
 \subsection{Reconstruction Metrics and Reward Function}
 \label{sec:reward}
-%----------------------------------------------------------------------
 
 Two error metrics quantify the deviation of the current reconstruction from the ground truth:
 
 \textbf{Chamfer Distance (CD).}\quad
 10\,000 points are sampled uniformly from both the reconstructed and ground-truth mesh surfaces via area-weighted barycentric sampling.
-KD-trees are used for nearest-neighbor queries, and the metric is the symmetric mean $L_1$ distance:
+KD-trees are used for nearest-neighbor queries, and the metric is the symmetric mean $L_1$ instead of $L_2$ to reduce sensitivity to outliers e.g. small floating artifacts in the reconstruction.
 \begin{equation}
     \mathrm{CD} = \frac{1}{2}\!\left(\frac{1}{N}\!\sum_{i=1}^{N}\!\min_{\mathbf{q}}\|\mathbf{p}_i - \mathbf{q}\|_1 + \frac{1}{N}\!\sum_{j=1}^{N}\!\min_{\mathbf{p}}\|\mathbf{q}_j - \mathbf{p}\|_1\right)
 \end{equation}
@@ -219,21 +216,19 @@ where $\{\mathbf{p}_i\}$ and $\{\mathbf{q}_j\}$ are the sampled point sets.
 \textbf{Voxel-wise TSDF Error.}\quad
 The reconstructed TSDF is queried on the same $32^3$ grid as the ground truth.
 The error has two components: (i)~the mean $L_1$ distance between observed TSDF values and the ground-truth SDF, and (ii)~a missing-voxel penalty equal to the fraction of near-surface voxels (ground-truth $|\text{SDF}| < 0.5 \cdot d_\text{trunc}$) that remain unobserved.
-Voxels below the table surface are excluded to avoid penalizing physically inaccessible regions.
+TODO ref to result, Voxels lower that $z_\text{table\_surface} - 0.5 \cdot d_\text{trunc}$ are excluded to avoid penalizing physically inaccessible regions.
 
 \textbf{Reward Shaping.}\quad
 Two modes translate the error $e_t$ into a per-step reward:
 \begin{itemize}
-    \item \emph{Exponential}: $r_t = s \cdot \exp(-e_t / c)$, where $s$ is a scale and $c$ the characteristic error.
-    \item \emph{Delta}: $r_t = s \cdot (e_{t-1} - e_t) / c$, which directly rewards error reduction.
+    \item \emph{Exponential}: $r_t = s \cdot \exp(-e_t / c)$, where $s=1.0$ is a scale and $c$ the characteristic error. This directly translates lower error into higher reward but also provides a positive signal for actions which preserve a current good reconstruction.
+    \item \emph{Delta}: $r_t = s \cdot (e_{t-1} - e_t) / c$, which directly rewards error reduction at each step. Here $c=\frac{1}{\text{horizon}}$ was chosen as this would be the improvement if the error smoothly went from 1 to 0 over the whole episode. This provides a clearer learning signal for the policy to focus on actions that improve the reconstruction, but is noisier due to the dependence on the previous step's error.
 \end{itemize}
-An optional action penalty $\lambda \cdot \overline{|\mathbf{a}_t|}$ discourages unnecessarily large motions.
-The delta mode was found to provide a clearer learning signal and is used in the final configuration.
+An classic action penalty $\lambda \cdot \overline{|\mathbf{a}_t|}$ with $\lambda = 0.1$ discourages unnecessarily large motions.
 
 %----------------------------------------------------------------------
 \subsection{Robot Policy Architecture}
 \label{sec:policy}
-%----------------------------------------------------------------------
 
 The policy uses a \emph{MultiInputPolicy} (Stable-Baselines3~\cite{stable-baselines3}) with a modular feature extraction front-end (\texttt{CombinedExtractor}) that fuses information from multiple observation modalities.
 Each sub-extractor processes a different observation key and produces a fixed-dimensional feature vector; the concatenated result is projected through a linear layer to a 256-dimensional combined representation, which is then fed into the shared policy and value network heads (two hidden layers of 256 units each).
@@ -256,7 +251,6 @@ This provides the policy with explicit spatial information about which parts of 
 
 %----------------------------------------------------------------------
 \subsection{Training}
-%----------------------------------------------------------------------
 
 Training uses PPO with the hyperparameters listed in Table~\ref{tab:hyperparams}.
 A single environment instance is used for data collection, and a separate evaluation environment with deterministic seeding logs images, meshes, and rewards every 50\,000 steps.
