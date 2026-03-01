@@ -1,6 +1,10 @@
 /TODO*
 /data/
 /results/
+*.pdf
+*.log
+*.aux
+*.out
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
