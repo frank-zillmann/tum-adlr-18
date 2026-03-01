@@ -170,16 +170,17 @@ A Gymnasium-compatible wrapper couples the first two into a single RL environmen
 %----------------------------------------------------------------------
 
 The environment is built on robosuite~\cite{robosuite2020} with MuJoCo physics.
-A Franka Panda 7-DoF manipulator is placed in front of a table ($1.0 \times 1.0$\,m) on which 2--4 primitive objects (boxes and cylinders of randomized sizes in $[0.05, 0.2]$\,m) are placed at random positions and orientations at each episode reset.
-The robot carries an RGB-D camera on its end-effector (tool center point, TCP).
+A Franka Panda 7-DoF manipulator is placed in front of a table ($1.0 \times 1.0$\,m) on which 4 primitive objects (boxes and cylinders of randomized sizes in $[0.05, 0.2]$\,m) are placed at random positions and orientations at each episode reset.
+The robot carries an RGB-D camera with ($128 \times 128$\,pixels) on its end-effector (TCP).
+The environment allows for further cameras such as frontview and birdview cameras, used for evaluation visualization and as additional observations for the policy.
 
 \textbf{Action Space.}\quad
-The robot is controlled via an Operational Space Controller (OSC\_POSE) that accepts 6-DoF delta commands $\mathbf{a} = [\Delta x, \Delta y, \Delta z, \Delta r_x, \Delta r_y, \Delta r_z] \in [-1, 1]^6$ in the robot base frame.
+The robot is controlled via an Operational Space Controller (OSC\_POSE) that accepts 6-DoF delta commands $\mathbf{a} = [\Delta x, \Delta y, \Delta z, \Delta r_x, \Delta r_y, \Delta r_z] \in [-1, 1]^6$ in the global world coordinate frame.
 These are scaled to position deltas of $\pm 0.05$\,m and orientation deltas of $\pm 0.25$\,rad per control step.
-The control frequency is 4\,Hz relative to the MuJoCo simulation, and the default episode horizon is 32 steps (8\,s of simulated time).
+The control frequency is 4\,Hz and the episode horizon is 32 steps (8\,s of simulated time).
 
 \textbf{Ground Truth.}\quad
-At each episode reset, the ground-truth mesh of the static scene (table plus objects) is extracted from MuJoCo's collision geometry, and its axis-aligned bounding box (with 5\% padding) defines the reconstruction volume.
+At each episode reset, the ground-truth mesh of the static scene desired for reconstruction (table plate and primitive objects on it, no table legs, walls, etc.) is extracted from MuJoCo's collision geometry, and its axis-aligned bounding box (with 5\% padding) defines the bounding box where the ground truth SDF is computed.
 For the voxel-wise TSDF metric, the ground-truth SDF is additionally computed on a $32^3$ grid via \texttt{mesh2sdf}~\cite{marian42_mesh_to_sdf}.
 
 %----------------------------------------------------------------------
