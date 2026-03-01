@@ -70,7 +70,7 @@ The main contributions are as follows:
 \begin{figure}[h]
 \centering
 \includegraphics[width=\linewidth]{episode_overview.png}
-\caption{Screenshot of a evaluation episode.}
+\caption{Screenshot of an evaluation episode.}
 \label{fig:episode_overview}
 \end{figure}
 
@@ -98,7 +98,7 @@ The system is decomposed into three components (Fig.~\ref{fig:architecture}):
 \begin{itemize}
     \item \textbf{Robot Environment:} The simulated environment in which the robot operates, including the computation of the 3D reconstruction errors and rewards.
     \item \textbf{Reconstruction Policy:} The method used to reconstruct the 3D environment from the robot's observations.
-    \item \textbf{Robot Policy:} The reinforcement learning policy and its neural architecture that decides the robot's actions based on its several observations.
+    \item \textbf{Robot Policy:} The reinforcement learning policy and its neural architecture that decides the robot's actions based on multiple observations.
 \end{itemize}
 
 From a reinforcement learning perspective, the combination of Robot Environment (\texttt{Reconstruct3D.py}) and Reconstruction Policy (\texttt{open3d\_reconstruction\_policy.py} or \texttt{nvblox\_reconstruction\_policy.py}) forms the total environment, while the Robot Policy is the agent that interacts with it.
@@ -244,7 +244,7 @@ This allows the policy to reason about where the camera has already been, avoidi
 
 \textbf{Image Features (CNN).}\quad
 A birdview RGB image (3~channels) from a fixed overhead camera and a grayscale rendering of the current reconstruction mesh (1~channel) are concatenated channel-wise (4~input channels) and processed by a three-layer CNN (stride-2 convolutions with batch normalization, followed by adaptive average pooling), yielding a 128-dimensional feature vector (56\,848 parameters).
-Images are resized to $64 \times 64$ in the forward pass. Furthermore, the use can choose to only use the RGB image, only the mesh rendering, neither, or both as input to the policy.
+Images are resized to $64 \times 64$ in the forward pass. Furthermore, the user can choose to use only the RGB image, only the mesh rendering, neither, or both as input to the policy.
 
 \textbf{Weight Grid (3D-CNN).}\quad
 When using nvblox, the per-voxel observation weight grid ($32^3$, indicating how often each voxel has been observed) is processed by a three-layer 3D-CNN, producing a 128-dimensional feature vector (50\,560 parameters).
@@ -264,9 +264,9 @@ The entire feature extraction front-end comprises 246\,288 trainable parameters.
 %----------------------------------------------------------------------
 \subsection{Training}
 
-Training uses PPO mostly with default parameters. The discount factor $\gamma$ was set to 0.98 to because of the rather short horizon and the entropy coefficient was set to 0.01 to encourage exploration.
+Training uses PPO mostly with default parameters. The discount factor $\gamma$ was set to 0.98 because of the rather short horizon, and the entropy coefficient was set to 0.01 to encourage exploration.
 Four parallel environment instances are used for data collection, and a separate evaluation environment with deterministic seeding logs images, meshes, and rewards every 50\,000 steps.
-Training was conducted on a CPU-only laptop (Open3D, Chamfer distance metric) and on a Google Cloud VM with an NVIDIA T4 GPU (nvblox back-end, voxel-wise TSDF Error) and many of the discussed features where implemented in an iterative manner depending on previous results over the course of the project, so a direct comparison of the training curves is not possible.
+Training was conducted on a CPU-only laptop (Open3D, Chamfer distance metric) and on a Google Cloud VM with an NVIDIA T4 GPU (nvblox back-end, voxel-wise TSDF error). Many of the discussed features were implemented iteratively based on previous results over the course of the project, so a direct comparison of all training curves is not possible.
 
 % \begin{table}[t]
 % \centering
@@ -302,13 +302,13 @@ Training was conducted on a CPU-only laptop (Open3D, Chamfer distance metric) an
 %======================================================================
 
 \subsection{Training Challenges}
-A large problem for the effective training and evaluation of the described approaches were memory leaks in the used libraries, which prevented long training runs.
-While a initial Segmentation Fault caused by the rendering of the current reconstruction could be fixed by switching from Open3D's visualizer to a custom off-screen renderer, a leak in nvblox caused the GPU memory usage to grow over time until the process was killed some hours of training.
+A major problem for the effective training and evaluation of the described approaches were memory leaks in the used libraries, which prevented long training runs.
+While an initial segmentation fault caused by the rendering of the current reconstruction could be fixed by switching from Open3D's visualizer to a custom off-screen renderer, a leak in nvblox caused the GPU memory usage to grow over time until the process was killed after several hours of training.
 Therefore, the final training run was limited to 250\,000 steps, which is relatively short for a complex RL problem and may have prevented the policy from fully converging.
 Furthermore, interesting ablation studies such as the effect of different reward shaping methods, observation modalities, or reconstruction back-ends could not be conducted due to the difficulty of running multiple long training runs.
 
 \subsection{Policy Performance and Iterative Improvements}
-First run showed the robot strongly jiggling the camera and frequently moving it away from the scene, which could be mostly fixed through the addition of the action penalty and the delta-based reward shaping.
+The first runs showed the robot strongly jiggling the camera and frequently moving it away from the scene, which could be largely fixed through the addition of the action penalty and the delta-based reward shaping.
 
 Early experiments used an exponential reward $r_t \propto \exp(-e_t/c)$ that provides positive feedback at every step.
 While stable, this signal was found to plateau quickly because the absolute error level provides less information about the \emph{marginal} value of each action.
@@ -317,12 +317,12 @@ Switching to the delta formulation $r_t \propto (e_{t-1} - e_t)$ provided a dire
 The Chamfer distance is a natural geometry-based metric but has non-trivial computational cost ($\sim$50\,ms per evaluation for 10\,000 sample points) and variance/noise due to stochastic point sampling.
 The voxel-wise TSDF error is deterministic and provides separate signals for accuracy (observed-voxel error) and coverage (missing-voxel penalty), but requires the nvblox back-end to query the TSDF on a dense grid.
 
-Adding the camera pose history via the Transformer encoder improved performance, which is expected as the agent can better avoid revisiting the same viewpoints but it might also have lead to less dependence on the configuration of the objects on the table as the policy can learn to just follow a fixed sweeping trajectory across the table without needing to adapt to the specific scene.
+Adding the camera pose history via the Transformer encoder improved performance, which is expected as the agent can better avoid revisiting the same viewpoints but it might also have led to less dependence on the configuration of objects on the table, as the policy can learn to simply follow a fixed sweeping trajectory without needing to adapt to the specific scene.
 Further ablation studies would be needed to investigate this hypothesis.
 
-The pre-final run \ref{fig:training_curve} showed a good increase in evaluation reward and even slightly beats the scripted baseline which moves over the table in a fixed trajectory and yields a average reward of 19.86 ± 4.3.
-This policy often steered to robot to the side and below the table at the end of the episode, which is likely due to the fact that there are voxels below the table which can sometimes be observed through this or because the reward signal becomes very noisy when the reconstruction is already good.
-To tackle further, the below-table voxels were excluded from the reward computation. The final training run with this change and the addition of the birdview image as input does not show this behavior anymore and confirms the hypothesis.
+The pre-final run (Fig.~\ref{fig:training_curve}) showed a steady increase in evaluation reward and even slightly outperformed the scripted baseline, which moves over the table in a fixed trajectory and yields an average reward of $19.86 \pm 4.3$.
+However, this policy often steered the robot to the side and below the table at the end of the episode, likely because voxels below the table surface could sometimes be observed from these positions, or because the reward signal becomes very noisy when the reconstruction is already good.
+To address this, the below-table voxels were excluded from the reward computation. The final training run with this change and the addition of the birdview image as input no longer shows this behavior, confirming the hypothesis.
 
 \begin{figure}[h]
 \centering
@@ -334,6 +334,8 @@ To tackle further, the below-table voxels were excluded from the reward computat
 %======================================================================
 \section{Conclusion}
 
+A modular framework for RL-based active 3D reconstruction was developed, combining robosuite simulation, TSDF-based volumetric fusion (Open3D / nvblox), and a multi-modal PPO policy.
+Delta reward shaping and pose-history observations proved most impactful; the learned policy slightly outperforms a scripted baseline despite limited long training runs and ablation studies by nvblox memory leaks.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
