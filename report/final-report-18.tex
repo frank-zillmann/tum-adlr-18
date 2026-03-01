@@ -59,12 +59,12 @@ Simultaneously, efficiently learning the 3D geometry of robot cells and workspac
 While other approaches try to tackle this problem through involving a human operator in the loop \cite{meli2025robotcellmodelingexploratory}, fully autonomous exploration and reconstruction is desirable for scalability and efficiency in frequently changing environments such manufacturing floors or laboratories.
 
 In this work, a little framework was developed in which a simulated Franka Panda manipulator learns to move its wrist-mounted camera so as to maximize the reconstruction quality of a tabletop scene within a fixed episode horizon.
-Our contributions are as follows:
+The main contributions are as follows:
 \begin{itemize}
-    \item A modular simulation environment built on robosuite~\cite{robosuite2020} and Gymnasium that couples physics-based robot control with incremental TSDF reconstruction.
-    \item A comparison of two volumetric reconstruction back-ends (Open3D~\cite{zhou2018open3d} and NVIDIA nvblox) and two error metrics (Chamfer distance and voxel-wise TSDF error).
-    \item A multi-modal policy architecture that fuses camera pose history (via a Transformer encoder), image observations (via CNNs), and volumetric observation weights (via a 3D-CNN).
-    \item Empirical results demonstrating learned exploration strategies that steadily improve reconstruction quality during each episode.
+    \item A modular simulation environment built on robosuite~\cite{robosuite2020} including multiple reconstruction metrics and methods for reward shaping and computation of the ground-truth geometry.
+    \item Integration of two volumetric reconstruction back-ends (Open3D~\cite{zhou2018open3d} and NVIDIA nvblox TODO citation) with a common interface
+    \item A multi-input policy architecture that modulary fuses multiple observations spatial modalities (camera pose history, 2D images, 3D reconstruction uncertainty).
+    \item A training pipeline using PPO that allows to flexibly choose reconstruction policy, reconstruction metric, obersavtions, and other hyperparameters using a environment wrapper with Gymnasium interface.
 \end{itemize}
 
 %======================================================================
