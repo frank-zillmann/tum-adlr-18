@@ -100,7 +100,7 @@ Alternative:
 The system is decomposed into three components (Fig.~\ref{fig:architecture}): the \emph{Robot Environment}, which handles physics simulation and reward computation; the \emph{Reconstruction Policy}, which maintains the volumetric scene representation; and the \emph{Robot Policy}, the RL agent that selects actions.
 A Gymnasium-compatible wrapper couples the first two into a single RL environment.
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
 \begin{tikzpicture}[
   box/.style={draw, thick, rounded corners=3pt, minimum width=35mm, minimum height=12mm, align=center},
@@ -162,12 +162,12 @@ A Gymnasium-compatible wrapper couples the first two into a single RL environmen
 \end{tikzpicture}
 \caption{System architecture. Solid arrows show the simulation loop; dashed arrows show observation flow to the RL agent. The wrapper encapsulates the environment and reconstruction module behind a standard Gymnasium interface.}
 \label{fig:architecture2}
-\end{figure}
+\end{figure*}
 
 
 % Alternative:
 
-% \begin{figure}[t]
+% \begin{figure*}[t]
 % \centering
 % \begin{tikzpicture}[
 %   box/.style={draw, thick, rounded corners=3pt, minimum width=32mm, minimum height=12mm, align=center, font=\small},
@@ -191,7 +191,7 @@ A Gymnasium-compatible wrapper couples the first two into a single RL environmen
 % \end{tikzpicture}
 % \caption{System architecture. Solid arrows show the simulation loop; dashed arrows show observation flow to the RL agent. The wrapper encapsulates the environment and reconstruction module behind a standard Gymnasium interface.}
 % \label{fig:architecture2}
-% \end{figure}
+% \end{figure*}
 
 %----------------------------------------------------------------------
 \subsection{Robot Environment}
