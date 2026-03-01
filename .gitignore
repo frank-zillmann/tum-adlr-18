@@ -5,6 +5,14 @@
 *.log
 *.aux
 *.out
+*.bst
+*.blg
+*.bbl
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.toc
+*.lof
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
