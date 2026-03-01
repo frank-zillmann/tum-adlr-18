@@ -33,12 +33,11 @@ frank.zillmann@tum.de}
 \maketitle
 
 \begin{abstract}
-We present a reinforcement learning framework for autonomous 3D scene reconstruction, in which a robot learns to plan camera trajectories that maximize reconstruction quality within a fixed time budget.
+Within this project the problem of autonomous 3D scene reconstruction is tackeled through a combination of reinforcement learning and classical multi-view geometry techniques.
 A simulated Franka Panda robot equipped with a wrist-mounted RGB-D camera explores a tabletop scene containing randomly placed primitive objects.
-Depth observations are incrementally fused into a Truncated Signed Distance Field (TSDF) using either Open3D or NVIDIA nvblox, and the resulting reconstruction is compared against a ground-truth mesh at every step to compute the reward signal.
-We formulate the problem as a Markov Decision Process and train the policy with Proximal Policy Optimization (PPO), comparing two reconstruction error metrics---Chamfer distance and a voxel-wise TSDF error---as well as two reward shaping strategies.
-The policy network combines a Transformer-based camera pose history encoder, CNN-based image feature extractors, and a 3D-CNN weight-grid encoder via a modular feature extraction architecture.
-Experiments show that the learned policy consistently improves reconstruction quality over the course of each episode and outperforms an untrained random baseline, while a hand-crafted scripted policy that traverses the table edges serves as an additional reference.
+Depth observations are incrementally fused into a Truncated Signed Distance Field (TSDF) using either Open3D or NVIDIA nvblox, and the resulting reconstruction is compared against a ground-truth mesh at every step---using Chamfer distance or a voxel-wise TSDF error---to compute the reward signal.
+The robot policy predicting the robot motion can use multiple observations in a modular structure, among them the previous trajectory using a Transformer or renderings and uncertainty data of the current reconstruction using Convolutional Neural Networks, and is trained with Proximal Policy Optimization (PPO).
+Experiments show that the policy useful strategies as moving up and sliding over the table, beating a simple scripted baseline. Challenges as little dependence on the configuration of objects on the table and missing long training runs due to memory leaks in the used libraries are discussed.
 \end{abstract}
 
 % \begin{IEEEkeywords}
