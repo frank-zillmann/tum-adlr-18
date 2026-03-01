@@ -187,17 +187,18 @@ For the voxel-wise TSDF metric, the ground-truth SDF is additionally computed on
 \subsection{Reconstruction Policy}
 %----------------------------------------------------------------------
 
-At every simulation step, the wrapper extracts the wrist camera's depth image, intrinsic matrix, and extrinsic pose, and passes them to the reconstruction back-end.
-Two back-ends are supported:
+At every simulation step, the wrapper extracts the wrist camera's depth image, intrinsic matrix, and extrinsic pose, and passes them to the reconstruction policy's \texttt{add\_obs} method.
+Two reconstruction policies are supported:
 
 \textbf{Open3D TSDF}~\cite{zhou2018open3d}: Uses the tensor-based \texttt{VoxelBlockGrid} API for depth-only integration with configurable voxel size, truncation distance, and maximum depth.
 Mesh extraction is performed via marching cubes.
 This back-end runs on CPU or GPU and requires no NVIDIA-specific drivers.
+It only allows to query the reconstructed mesh, so the reward is computed via Chamfer distance to the ground-truth mesh.
 
-\textbf{NVIDIA nvblox}: Provides GPU-accelerated TSDF integration and direct voxel querying.
+\textbf{NVIDIA nvblox} TODO cite: Provides GPU-accelerated TSDF integration in a similar manner to Open3D but requires an NVIDIA GPU and CUDA drivers.
 Beyond mesh extraction, nvblox supports querying the TSDF and observation weights on a dense grid, which enables the voxel-wise TSDF error metric and weight-grid observations.
 
-Both back-ends share a common interface (\texttt{BaseReconstructionPolicy}) with \texttt{add\_obs}, \texttt{reconstruct}, and \texttt{reset} methods, making the choice transparent to the rest of the pipeline.
+Both back-ends share a common interface (\texttt{BaseReconstructionPolicy}) with \texttt{add\_obs}, \texttt{reconstruct}, and \texttt{reset} methods, making it easy to switch between through the config file without changing the training code and to potentially add new reconstruction methods.
 Default parameters are a voxel size of 0.01\,m, a truncation distance of 0.04\,m, and a maximum integration depth of 1.0\,m.
 
 %----------------------------------------------------------------------
