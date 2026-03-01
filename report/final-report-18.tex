@@ -33,11 +33,11 @@ frank.zillmann@tum.de}
 \maketitle
 
 \begin{abstract}
-Within this project the problem of autonomous 3D scene reconstruction is tackeled through a combination of reinforcement learning and classical multi-view geometry techniques.
+Within this project the problem of autonomous 3D scene reconstruction is tackled through a combination of reinforcement learning and classical multi-view geometry techniques.
 A simulated Franka Panda robot equipped with a wrist-mounted RGB-D camera explores a tabletop scene containing randomly placed primitive objects.
 Depth observations are incrementally fused into a Truncated Signed Distance Field (TSDF) using either Open3D or NVIDIA nvblox, and the resulting reconstruction is compared against a ground-truth mesh at every step---using Chamfer distance or a voxel-wise TSDF error---to compute the reward signal.
 The robot policy predicting the robot motion can use multiple observations in a modular structure, among them the previous trajectory using a Transformer or renderings and uncertainty data of the current reconstruction using Convolutional Neural Networks, and is trained with Proximal Policy Optimization (PPO).
-Experiments show that the policy useful strategies as moving up and sliding over the table, beating a simple scripted baseline. Challenges as little dependence on the configuration of objects on the table and missing long training runs due to memory leaks in the used libraries are discussed.
+Experiments show that the policy learns useful strategies such as moving upward and sweeping across the table, outperforming a simple scripted baseline. Challenges such as limited dependence on the configuration of objects on the table and the absence of long training runs due to memory leaks in the used libraries are discussed.
 \end{abstract}
 
 % \begin{IEEEkeywords}
@@ -56,15 +56,15 @@ In practice, the choice of viewpoints critically affects reconstruction quality:
 % Recently, learning-based approaches have emerged as a promising alternative, leveraging deep reinforcement learning (RL) to discover non-myopic viewpoint planning strategies directly from data~\cite{meli2025robotcellmodelingexploratory}.
 
 Simultaneously, efficiently learning the 3D geometry of robot cells and workspaces to enable safe and effective operation is a critical capability for autonomous robots.
-While other approaches try to tackle this problem through involving a human operator in the loop \cite{meli2025robotcellmodelingexploratory}, fully autonomous exploration and reconstruction is desirable for scalability and efficiency in frequently changing environments such manufacturing floors or laboratories.
+While other approaches try to tackle this problem through involving a human operator in the loop \cite{meli2025robotcellmodelingexploratory}, fully autonomous exploration and reconstruction is desirable for scalability and efficiency in frequently changing environments such as manufacturing floors or laboratories.
 
-In this work, a little framework was developed in which a simulated Franka Panda manipulator learns to move its wrist-mounted camera so as to maximize the reconstruction quality of a tabletop scene within a fixed episode horizon.
+In this work, a modular framework was developed in which a simulated Franka Panda manipulator learns to move its wrist-mounted camera so as to maximize the reconstruction quality of a tabletop scene within a fixed episode horizon.
 The main contributions are as follows:
 \begin{itemize}
     \item A modular simulation environment built on robosuite~\cite{robosuite2020} including multiple reconstruction metrics and methods for reward shaping and computation of the ground-truth geometry.
-    \item Integration of two volumetric reconstruction back-ends (Open3D~\cite{zhou2018open3d} and NVIDIA nvblox TODO citation) with a common interface
-    \item A multi-input policy architecture that modulary fuses multiple observations spatial modalities (camera pose history, 2D images, 3D reconstruction uncertainty).
-    \item A training pipeline using PPO that allows to flexibly choose reconstruction policy, reconstruction metric, obersavtions, and other hyperparameters using a environment wrapper with Gymnasium interface.
+    \item Integration of two volumetric reconstruction back-ends (Open3D~\cite{zhou2018open3d} and NVIDIA nvblox~\cite{nvblox}) with a common interface.
+    \item A multi-input policy architecture that modularly fuses multiple spatial observation modalities (camera pose history, 2D images, 3D reconstruction uncertainty).
+    \item A training pipeline using PPO that allows flexibly choosing the reconstruction policy, reconstruction metric, observations, and other hyperparameters via an environment wrapper with a Gymnasium interface.
 \end{itemize}
 
 %======================================================================
@@ -91,11 +91,11 @@ The system is decomposed into three components (Fig.~\ref{fig:architecture}):
 \begin{itemize}
     \item \textbf{Robot Environment:} The simulated environment in which the robot operates, including the computation of the 3D reconstruction errors and rewards.
     \item \textbf{Reconstruction Policy:} The method used to reconstruct the 3D environment from the robot's observations.
-    \item \textbf{Robot Policy:} The reinforcement learning policy and it's neural architecture that decides the robot's actions based on it several observations.
+    \item \textbf{Robot Policy:} The reinforcement learning policy and its neural architecture that decides the robot's actions based on its several observations.
 \end{itemize}
 
-From a Reinforcement Learning perspective the combination of Robot Environment (\texttt{Reconstruct3D.py}) and Reconstruction Policy (\texttt{open3d\_TSDF\_generator.py} or \texttt{nvblox\_reconstruction\_policy.py}) can be seen as the total environment from a Reinforcement Learning perspective, while the Robot Policy is the agent that interacts with this environment. 
-This approach is also taken in the code which uses the \texttt{reconstruct3D\_gym\_wrapper.py} to handle all necessary interactions between robot environment and reconstruction policy and the creation of the observations for the robot policy.
+From a reinforcement learning perspective, the combination of Robot Environment (\texttt{Reconstruct3D.py}) and Reconstruction Policy (\texttt{open3d\_TSDF\_generator.py} or \texttt{nvblox\_reconstruction\_policy.py}) forms the total environment, while the Robot Policy is the agent that interacts with it.
+This separation is reflected in the code, where \texttt{reconstruct3D\_gym\_wrapper.py} handles all interactions between the robot environment and the reconstruction policy and assembles the observations for the robot policy.
 
 \begin{figure*}[t]
 \centering
@@ -158,14 +158,14 @@ This approach is also taken in the code which uses the \texttt{reconstruct3D\_gy
 
 \end{tikzpicture}
 \caption{System architecture. Solid arrows show the simulation loop; dashed arrows show observation flow to the RL agent. The wrapper encapsulates the environment and reconstruction module behind a standard Gymnasium interface.}
-\label{fig:architecture2}
+\label{fig:architecture}
 \end{figure*}
 %----------------------------------------------------------------------
 \subsection{Robot Environment}
 
 The environment is built on robosuite~\cite{robosuite2020} with MuJoCo physics.
 A Franka Panda 7-DoF manipulator is placed in front of a table ($1.0 \times 1.0$\,m) on which 4 primitive objects (boxes and cylinders of randomized sizes in $[0.05, 0.2]$\,m) are placed at random positions and orientations at each episode reset.
-The robot carries an RGB-D camera with ($128 \times 128$\,pixels) on its end-effector (TCP).
+The robot carries an RGB-D camera ($128 \times 128$\,pixels) on its end-effector (TCP).
 The environment allows for further cameras such as frontview and birdview cameras, used for evaluation visualization and as additional observations for the policy.
 
 \textbf{Action Space.}\quad
@@ -186,12 +186,12 @@ Two reconstruction policies are supported:
 \textbf{Open3D TSDF}~\cite{zhou2018open3d}: Uses the tensor-based \texttt{VoxelBlockGrid} API for depth-only integration with configurable voxel size, truncation distance, and maximum depth.
 Mesh extraction is performed via marching cubes.
 This back-end runs on CPU or GPU and requires no NVIDIA-specific drivers.
-It only allows to query the reconstructed mesh, so the reward is computed via Chamfer distance to the ground-truth mesh.
+It only allows querying the reconstructed mesh, so the reward is computed via Chamfer distance to the ground-truth mesh.
 
-\textbf{NVIDIA nvblox} TODO cite: Provides GPU-accelerated TSDF integration in a similar manner to Open3D but requires an NVIDIA GPU and CUDA drivers.
+\textbf{NVIDIA nvblox}~\cite{nvblox}: Provides GPU-accelerated TSDF integration in a similar manner to Open3D but requires an NVIDIA GPU and CUDA drivers.
 Beyond mesh extraction, nvblox supports querying the TSDF and observation weights on a dense grid, which enables the voxel-wise TSDF error metric and weight-grid observations.
 
-Both back-ends share a common interface (\texttt{BaseReconstructionPolicy}) with \texttt{add\_obs}, \texttt{reconstruct}, and \texttt{reset} methods, making it easy to switch between through the config file without changing the training code and to potentially add new reconstruction methods.
+Both back-ends share a common interface (\texttt{BaseReconstructionPolicy}) with \texttt{add\_obs}, \texttt{reconstruct}, and \texttt{reset} methods, making it easy to switch between them via the configuration file without changing the training code and to add new reconstruction methods.
 Default parameters are a voxel size of 0.01\,m, a truncation distance of 0.04\,m, and a maximum integration depth of 1.0\,m.
 
 %----------------------------------------------------------------------
@@ -202,7 +202,7 @@ Two error metrics quantify the deviation of the current reconstruction from the 
 
 \textbf{Chamfer Distance (CD).}\quad
 10\,000 points are sampled uniformly from both the reconstructed and ground-truth mesh surfaces via area-weighted barycentric sampling.
-KD-trees are used for nearest-neighbor queries, and the metric is the symmetric mean $L_1$ instead of $L_2$ to reduce sensitivity to outliers e.g. small floating artifacts in the reconstruction.
+KD-trees are used for nearest-neighbor queries, and the metric is the symmetric mean $L_1$ instead of $L_2$ to reduce sensitivity to outliers, e.g.,\ small floating artifacts in the reconstruction.
 \begin{equation}
     \mathrm{CD} = \frac{1}{2}\!\left(\frac{1}{N}\!\sum_{i=1}^{N}\!\min_{\mathbf{q}}\|\mathbf{p}_i - \mathbf{q}\|_1 + \frac{1}{N}\!\sum_{j=1}^{N}\!\min_{\mathbf{p}}\|\mathbf{q}_j - \mathbf{p}\|_1\right)
 \end{equation}
@@ -211,7 +211,7 @@ where $\{\mathbf{p}_i\}$ and $\{\mathbf{q}_j\}$ are the sampled point sets.
 \textbf{Voxel-wise TSDF Error.}\quad
 The reconstructed TSDF is queried on the same $32^3$ grid as the ground truth.
 The error has two components: (i)~the mean $L_1$ distance between observed TSDF values and the ground-truth SDF, and (ii)~a missing-voxel penalty equal to the fraction of near-surface voxels (ground-truth $|\text{SDF}| < 0.5 \cdot d_\text{trunc}$) that remain unobserved.
-TODO ref to result, Voxels lower that $z_\text{table\_surface} - 0.5 \cdot d_\text{trunc}$ are excluded to avoid penalizing physically inaccessible regions.
+Voxels below $z_\text{table\_surface} - 0.5 \cdot d_\text{trunc}$ are excluded to avoid penalizing physically inaccessible regions beneath the table.
 
 \textbf{Reward Shaping.}\quad
 Two modes translate the error $e_t$ into a per-step reward:
@@ -219,7 +219,7 @@ Two modes translate the error $e_t$ into a per-step reward:
     \item \emph{Exponential}: $r_t = s \cdot \exp(-e_t / c)$, where $s=1.0$ is a scale and $c$ the characteristic error. This directly translates lower error into higher reward but also provides a positive signal for actions which preserve a current good reconstruction.
     \item \emph{Delta}: $r_t = s \cdot (e_{t-1} - e_t) / c$, which directly rewards error reduction at each step. Here $c=\frac{1}{\text{horizon}}$ was chosen as this would be the improvement if the error smoothly went from 1 to 0 over the whole episode. This provides a clearer learning signal for the policy to focus on actions that improve the reconstruction, but is noisier due to the dependence on the previous step's error.
 \end{itemize}
-An classic action penalty $\lambda \cdot \overline{|\mathbf{a}_t|}$ with $\lambda = 0.1$ discourages unnecessarily large motions.
+A classic action penalty $\lambda \cdot \overline{|\mathbf{a}_t|}$ with $\lambda = 0.1$ discourages unnecessarily large motions.
 
 %----------------------------------------------------------------------
 \subsection{Robot Policy Architecture}
@@ -231,26 +231,30 @@ Each sub-extractor processes a different observation key and produces a fixed-di
 The following sub-extractors are used:
 
 \textbf{Camera Pose History (Transformer).}\quad
-The sequence of 7-DoF camera poses (position + quaternion) collected during the episode is processed by a small Transformer encoder (1 layer, 4 heads, $d_\text{model}=64$).
-Positional embeddings are added, zero-padded future steps are masked, and the output is mean-pooled over valid time steps.
+The sequence of 7-DoF camera poses (position + quaternion) collected during the episode is processed by a small Transformer encoder (1~layer, 4~heads, $d_\text{model}=64$, feed-forward dimension~256, maximum 32~steps).
+Positional embeddings are added, zero-padded future steps are masked, and the output is mean-pooled over valid time steps to produce a 64-dimensional feature vector (56\,704 parameters).
 This allows the policy to reason about where the camera has already been, avoiding redundant revisits.
 
 \textbf{Image Features (CNN).}\quad
-A birdview RGB image from a fixed overhead camera and a grayscale rendering of the current reconstruction mesh are concatenated channel-wise and processed by a three-layer CNN (stride-2 convolutions with batch normalization, followed by adaptive average pooling), yielding a 128-dimensional feature vector.
-Images are resized to $64 \times 64$ in the forward pass.
+A birdview RGB image (3~channels) from a fixed overhead camera and a grayscale rendering of the current reconstruction mesh (1~channel) are concatenated channel-wise (4~input channels) and processed by a three-layer CNN (stride-2 convolutions with batch normalization, followed by adaptive average pooling), yielding a 128-dimensional feature vector (56\,848 parameters).
+Images are resized to $64 \times 64$ in the forward pass. Furthermore, the use can choose to only use the RGB image, only the mesh rendering, neither, or both as input to the policy.
 
 \textbf{Weight Grid (3D-CNN).}\quad
-When using nvblox, the per-voxel observation weight grid ($32^3$, indicating how often each voxel has been observed) is processed by a three-layer 3D-CNN.
+When using nvblox, the per-voxel observation weight grid ($32^3$, indicating how often each voxel has been observed) is processed by a three-layer 3D-CNN, producing a 128-dimensional feature vector (50\,560 parameters).
 Weights are log-scaled ($\ln(1+w)$) before passing through the network.
 This provides the policy with explicit spatial information about which parts of the scene lack observations.
 
-TODO add image of architecture
+The three sub-extractor outputs (dimensions 64, 128, 128) are concatenated into a 320-dimensional vector and projected to a 256-dimensional combined representation through a linear layer.
+The entire feature extraction front-end comprises 246\,288 trainable parameters.
+
+% Architecture image
+
 
 %----------------------------------------------------------------------
 \subsection{Training}
 
 Training uses PPO with the hyperparameters listed in Table~\ref{tab:hyperparams}.
-A single environment instance is used for data collection, and a separate evaluation environment with deterministic seeding logs images, meshes, and rewards every 50\,000 steps.
+Four parallel environment instances are used for data collection, and a separate evaluation environment with deterministic seeding logs images, meshes, and rewards every 50\,000 steps.
 
 \begin{table}[t]
 \centering
