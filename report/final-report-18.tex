@@ -86,6 +86,7 @@ The robosuite simulator~\cite{robosuite2020} provides standardized manipulation 
 
 %======================================================================
 \section{Methods}
+
 The system is decomposed into three components (Fig.~\ref{fig:architecture}):
 \begin{itemize}
     \item \textbf{Robot Environment:} The simulated environment in which the robot operates, including the computation of the 3D reconstruction errors and rewards.
@@ -95,11 +96,6 @@ The system is decomposed into three components (Fig.~\ref{fig:architecture}):
 
 From a Reinforcement Learning perspective the combination of Robot Environment (\texttt{Reconstruct3D.py}) and Reconstruction Policy (\texttt{open3d\_TSDF\_generator.py} or \texttt{nvblox\_reconstruction\_policy.py}) can be seen as the total environment from a Reinforcement Learning perspective, while the Robot Policy is the agent that interacts with this environment. 
 This approach is also taken in the code which uses the \texttt{reconstruct3D\_gym\_wrapper.py} to handle all necessary interactions between robot environment and reconstruction policy and the creation of the observations for the robot policy.
-
-Alternative:
-
-The system is decomposed into three components (Fig.~\ref{fig:architecture}): the \emph{Robot Environment}, which handles physics simulation and reward computation; the \emph{Reconstruction Policy}, which maintains the volumetric scene representation; and the \emph{Robot Policy}, the RL agent that selects actions.
-A Gymnasium-compatible wrapper couples the first two into a single RL environment.
 
 \begin{figure*}[t]
 \centering
@@ -164,7 +160,6 @@ A Gymnasium-compatible wrapper couples the first two into a single RL environmen
 \caption{System architecture. Solid arrows show the simulation loop; dashed arrows show observation flow to the RL agent. The wrapper encapsulates the environment and reconstruction module behind a standard Gymnasium interface.}
 \label{fig:architecture2}
 \end{figure*}
-
 %----------------------------------------------------------------------
 \subsection{Robot Environment}
 
@@ -231,7 +226,7 @@ An classic action penalty $\lambda \cdot \overline{|\mathbf{a}_t|}$ with $\lambd
 \label{sec:policy}
 
 The policy uses a \emph{MultiInputPolicy} (Stable-Baselines3~\cite{stable-baselines3}) with a modular feature extraction front-end (\texttt{CombinedExtractor}) that fuses information from multiple observation modalities.
-Each sub-extractor processes a different observation key and produces a fixed-dimensional feature vector; the concatenated result is projected through a linear layer to a 256-dimensional combined representation, which is then fed into the shared policy and value network heads (two hidden layers of 256 units each).
+Each sub-extractor processes a different observation key and produces a fixed-dimensional feature vector; the concatenated result is projected through a linear layer to a 256-dimensional combined representation, which is then fed into the policy and value network heads (two hidden layers of 256 units each).
 
 The following sub-extractors are used:
 
@@ -248,6 +243,8 @@ Images are resized to $64 \times 64$ in the forward pass.
 When using nvblox, the per-voxel observation weight grid ($32^3$, indicating how often each voxel has been observed) is processed by a three-layer 3D-CNN.
 Weights are log-scaled ($\ln(1+w)$) before passing through the network.
 This provides the policy with explicit spatial information about which parts of the scene lack observations.
+
+TODO add image of architecture
 
 %----------------------------------------------------------------------
 \subsection{Training}
