@@ -266,6 +266,7 @@ The entire feature extraction front-end comprises 246\,288 trainable parameters.
 
 Training uses PPO mostly with default parameters. The discount factor $\gamma$ was set to 0.98 to because of the rather short horizon and the entropy coefficient was set to 0.01 to encourage exploration.
 Four parallel environment instances are used for data collection, and a separate evaluation environment with deterministic seeding logs images, meshes, and rewards every 50\,000 steps.
+Training was conducted on a CPU-only laptop (Open3D, Chamfer distance metric) and on a Google Cloud VM with an NVIDIA T4 GPU (nvblox back-end, voxel-wise TSDF Error) and many of the discussed features where implemented in an iterative manner depending on previous results over the course of the project, so a direct comparison of the training curves is not possible.
 
 % \begin{table}[t]
 % \centering
@@ -300,20 +301,24 @@ Four parallel environment instances are used for data collection, and a separate
 \section{Results and Discussion}
 %======================================================================
 
-\subsection{Learning Progress}
+\subsection{Iterative Improvement and Challenges}
+A large problem for the effective training and evaluation of the described approaches were memory leaks in the used libraries, which prevented long training runs.
+While a initial Segmentation Fault caused by the rendering of the current reconstruction could be fixed by switching from Open3D's visualizer to a custom off-screen renderer, a leak in nvblox caused the GPU memory usage to grow over time until the process was killed some hours of training.
+Therefore, the final training run was limited to 250\,000 steps, which is relatively short for a complex RL problem and may have prevented the policy from fully converging.
+Furthermore, interesting ablation studies such as the effect of different reward shaping methods, observation modalities, or reconstruction back-ends could not be conducted due to the difficulty of running multiple long training runs.
 
-Training was conducted on a CPU-only laptop (Open3D back-end, Chamfer distance metric) and on a Google Cloud VM with an NVIDIA T4 GPU (nvblox back-end).
-On the CPU configuration, PPO achieves approximately 9 environment frames per second, resulting in training times of roughly 3 hours per 100\,000 steps.
+Th
+
+\subsection{Final Performance}
 
 Fig.~\ref{fig:training_curve} shows the mean episode reward over the course of training.
 Starting from an initial mean reward of approximately 2.6, the policy steadily improves to a plateau around 8.0 over the first 100\,000 steps.
 This corresponds to a consistent reduction of the Chamfer distance at each step of the episode, indicating that the agent learns to move the camera to informative viewpoints.
 
-\begin{figure}[t]
+\begin{figure}[h]
 \centering
-% Placeholder: replace with actual training curve
-\fbox{\parbox{0.9\linewidth}{\centering\vspace{1.5cm}\textit{Training reward curve placeholder}\\\small(ep\_rew\_mean: 2.6 $\to$ 8.2 over 100k steps)\vspace{1.5cm}}}
-\caption{Mean episode reward during PPO training (Open3D, Chamfer distance, delta reward). The agent learns to reduce reconstruction error over each episode.}
+\includegraphics[width=\linewidth]{eval_rewards.png}
+\caption{Evaluation reward curves of final run (light blue) and longer run (dark blue) without birdview image and below-table voxel exclusion.}
 \label{fig:training_curve}
 \end{figure}
 
