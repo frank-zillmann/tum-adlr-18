@@ -13,7 +13,7 @@ def get_default_device() -> str:
     return "CPU:0"
 
 
-class Open3DTSDFGenerator(BaseReconstructionPolicy):
+class Open3DReconstructionPolicy(BaseReconstructionPolicy):
     """
     Generate Truncated Signed Distance Fields from depth observations using Open3D.
 

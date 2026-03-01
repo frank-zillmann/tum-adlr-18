@@ -19,10 +19,10 @@ def create_reconstruction_policy(policy_name: str):
         Reconstruction policy instance with default parameters
     """
     if policy_name == "open3d":
-        from src.reconstruction_policies.open3d_TSDF_generator import (
-            Open3DTSDFGenerator,
+        from reconstruction_policies.open3d_reconstruction_policy import (
+            Open3DReconstructionPolicy,
         )
-        return Open3DTSDFGenerator()
+        return Open3DReconstructionPolicy()
         
     elif policy_name == "nvblox":
         from src.reconstruction_policies.nvblox_reconstruction_policy import (

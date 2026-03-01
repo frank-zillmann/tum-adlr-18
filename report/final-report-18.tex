@@ -101,7 +101,7 @@ The system is decomposed into three components (Fig.~\ref{fig:architecture}):
     \item \textbf{Robot Policy:} The reinforcement learning policy and its neural architecture that decides the robot's actions based on its several observations.
 \end{itemize}
 
-From a reinforcement learning perspective, the combination of Robot Environment (\texttt{Reconstruct3D.py}) and Reconstruction Policy (\texttt{open3d\_TSDF\_generator.py} or \texttt{nvblox\_reconstruction\_policy.py}) forms the total environment, while the Robot Policy is the agent that interacts with it.
+From a reinforcement learning perspective, the combination of Robot Environment (\texttt{Reconstruct3D.py}) and Reconstruction Policy (\texttt{open3d\_reconstruction\_policy.py} or \texttt{nvblox\_reconstruction\_policy.py}) forms the total environment, while the Robot Policy is the agent that interacts with it.
 This separation is reflected in the code, where \texttt{reconstruct3D\_gym\_wrapper.py} handles all interactions between the robot environment and the reconstruction policy and assembles the observations for the robot policy.
 
 \begin{figure*}[t]
