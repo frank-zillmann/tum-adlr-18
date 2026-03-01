@@ -301,76 +301,39 @@ Training was conducted on a CPU-only laptop (Open3D, Chamfer distance metric) an
 \section{Results and Discussion}
 %======================================================================
 
-\subsection{Iterative Improvement and Challenges}
+\subsection{Training Challenges}
 A large problem for the effective training and evaluation of the described approaches were memory leaks in the used libraries, which prevented long training runs.
 While a initial Segmentation Fault caused by the rendering of the current reconstruction could be fixed by switching from Open3D's visualizer to a custom off-screen renderer, a leak in nvblox caused the GPU memory usage to grow over time until the process was killed some hours of training.
 Therefore, the final training run was limited to 250\,000 steps, which is relatively short for a complex RL problem and may have prevented the policy from fully converging.
 Furthermore, interesting ablation studies such as the effect of different reward shaping methods, observation modalities, or reconstruction back-ends could not be conducted due to the difficulty of running multiple long training runs.
 
-Th
+\subsection{Policy Performance and Iterative Improvements}
+First run showed the robot strongly jiggling the camera and frequently moving it away from the scene, which could be mostly fixed through the addition of the action penalty and the delta-based reward shaping.
 
-\subsection{Final Performance}
+Early experiments used an exponential reward $r_t \propto \exp(-e_t/c)$ that provides positive feedback at every step.
+While stable, this signal was found to plateau quickly because the absolute error level provides less information about the \emph{marginal} value of each action.
+Switching to the delta formulation $r_t \propto (e_{t-1} - e_t)$ provided a direct signal for error reduction and improved learning speed.
 
-Fig.~\ref{fig:training_curve} shows the mean episode reward over the course of training.
-Starting from an initial mean reward of approximately 2.6, the policy steadily improves to a plateau around 8.0 over the first 100\,000 steps.
-This corresponds to a consistent reduction of the Chamfer distance at each step of the episode, indicating that the agent learns to move the camera to informative viewpoints.
+The Chamfer distance is a natural geometry-based metric but has non-trivial computational cost ($\sim$50\,ms per evaluation for 10\,000 sample points) and variance/noise due to stochastic point sampling.
+The voxel-wise TSDF error is deterministic and provides separate signals for accuracy (observed-voxel error) and coverage (missing-voxel penalty), but requires the nvblox back-end to query the TSDF on a dense grid.
+
+Adding the camera pose history via the Transformer encoder improved performance, which is expected as the agent can better avoid revisiting the same viewpoints but it might also have lead to less dependence on the configuration of the objects on the table as the policy can learn to just follow a fixed sweeping trajectory across the table without needing to adapt to the specific scene.
+Further ablation studies would be needed to investigate this hypothesis.
+
+The pre-final run \ref{fig:training_curve} showed a good increase in evaluation reward and even slightly beats the scripted baseline which moves over the table in a fixed trajectory and yields a average reward of 19.86 ± 4.3.
+This policy often steered to robot to the side and below the table at the end of the episode, which is likely due to the fact that there are voxels below the table which can sometimes be observed through this or because the reward signal becomes very noisy when the reconstruction is already good.
+To tackle further, the below-table voxels were excluded from the reward computation. The final training run with this change and the addition of the birdview image as input does not show this behavior anymore and confirms the hypothesis.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=\linewidth]{eval_rewards.png}
-\caption{Evaluation reward curves of final run (light blue) and longer run (dark blue) without birdview image and below-table voxel exclusion.}
+\caption{Evaluation reward curves of final run (light blue) and longer pre-final run (dark blue) without birdview image and below-table voxel exclusion.}
 \label{fig:training_curve}
 \end{figure}
 
-\subsection{Iterative Design and Challenges}
-
-The final system is the result of iterative refinement across several dimensions:
-
-\textbf{Reward function.}\quad
-Early experiments used an exponential reward $r_t = \exp(-e_t/c)$ that provides positive feedback at every step.
-While stable, this signal was found to plateau quickly because the absolute error level provides less information about the \emph{marginal} value of each action.
-Switching to the delta formulation $r_t \propto (e_{t-1} - e_t)$ provided a direct signal for error reduction and improved learning speed.
-
-\textbf{Observation space.}\quad
-Initial experiments used only the 7-DoF camera pose as input.
-Adding the camera pose \emph{history} via the Transformer encoder substantially improved performance, as the agent could avoid revisiting the same viewpoints.
-Incorporating the birdview RGB image and reconstruction mesh render provided spatial grounding.
-Finally, the nvblox weight grid---indicating which voxels have been observed---gave the policy explicit information about unvisited regions, further improving reconstruction coverage.
-
-\textbf{Reconstruction metric.}\quad
-The Chamfer distance is a natural geometry-based metric but has non-trivial computational cost ($\sim$50\,ms per evaluation for 10\,000 sample points) and variance due to stochastic point sampling.
-The voxel-wise TSDF error is deterministic and provides separate signals for accuracy (observed-voxel error) and coverage (missing-voxel penalty), but requires the nvblox back-end to query the TSDF on a dense grid.
-
-\textbf{Simulation speed.}\quad
-Timing analysis reveals that a single environment step takes approximately 110\,ms on CPU, dominated by Open3D reconstruction ($\sim$30\%) and reward computation ($\sim$25\%).
-On GPU with nvblox, TSDF integration is substantially faster, though the overall loop remains bottlenecked by MuJoCo rendering.
-
-\textbf{Scripted baseline.}\quad
-A hand-coded policy that moves the TCP along a rectangular path around the table edges while pointing the camera at the table center serves as a reference.
-This scripted policy achieves reasonable reconstruction coverage by construction but cannot adapt to specific object configurations.
-
-\subsection{Qualitative Analysis}
-
-The trained policy develops an intuitive exploration strategy: it tends to move the camera in broad sweeps across the table, tilting to observe objects from multiple angles, and reduces its motion amplitude toward the end of the episode when marginal gains diminish.
-By contrast, the untrained (random) policy frequently moves the camera away from the scene or repeatedly observes the same region.
-
-The scripted baseline follows a fixed rectangular trajectory and achieves consistent but suboptimal coverage—it cannot, for instance, dip the camera to observe the sides of tall objects.
-The learned policy shows more adaptive behavior, adjusting its trajectory based on the current observation state.
-
 %======================================================================
 \section{Conclusion}
-%======================================================================
 
-We have presented a modular RL framework for active 3D reconstruction in which a robot learns camera trajectory planning to maximize scene reconstruction quality.
-The system cleanly separates physics simulation, volumetric reconstruction, and policy learning behind a Gymnasium interface, enabling easy experimentation with different reconstruction back-ends, error metrics, and observation modalities.
-
-Key findings include: (i)~delta-based reward shaping outperforms exponential rewards for this task; (ii)~providing the policy with both spatial (weight grid, images) and temporal (pose history) context is important for effective exploration; and (iii)~volumetric TSDF-based methods provide a computationally tractable reconstruction loop suitable for RL training.
-
-\textbf{Limitations and Future Work.}\quad
-The current scene complexity is limited to primitive shapes on a flat table.
-Scaling to more complex environments with articulated or deformable objects remains an open challenge.
-The single-arm setup constrains the reachable workspace; a mobile base or multi-arm configuration could enable exploration of larger scenes.
-Future work could also incorporate uncertainty-aware reconstruction methods~\cite{Liao_2024_WACV, Guo_2024_UNIKD} directly into the observation space, or transfer the learned policy to a real robot via sim-to-real techniques.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
