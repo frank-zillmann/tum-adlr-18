@@ -86,16 +86,15 @@ The robosuite simulator~\cite{robosuite2020} provides standardized manipulation 
 
 %======================================================================
 \section{Methods}
-The task can be divided into the following components:
+The system is decomposed into three components (Fig.~\ref{fig:architecture}):
 \begin{itemize}
-    \item Robot Environment: The simulated environment in which the robot operates, including the computation of the 3D reconstruction errors and rewards.
-    \item Reconstruction Policy: The method used to reconstruct the 3D environment from the robot's observations.
-    \item Robot Policy: The reinforcement learning policy and it's neural architecture that decides the robot's actions based on it several observations.
+    \item \textbf{Robot Environment:} The simulated environment in which the robot operates, including the computation of the 3D reconstruction errors and rewards.
+    \item \textbf{Reconstruction Policy:} The method used to reconstruct the 3D environment from the robot's observations.
+    \item \textbf{Robot Policy:} The reinforcement learning policy and it's neural architecture that decides the robot's actions based on it several observations.
 \end{itemize}
 
 From a Reinforcement Learning perspective the combination of Robot Environment (\texttt{Reconstruct3D.py}) and Reconstruction Policy (\texttt{open3d\_TSDF\_generator.py} or \texttt{nvblox\_reconstruction\_policy.py}) can be seen as the total environment from a Reinforcement Learning perspective, while the Robot Policy is the agent that interacts with this environment. 
 This approach is also taken in the code which uses the \texttt{reconstruct3D\_gym\_wrapper.py} to handle all necessary interactions between robot environment and reconstruction policy and the creation of the observations for the robot policy.
-TODO shows a schematic overview of the interactions between the different components as well as the gym wrapper perspective.
 
 Alternative:
 
@@ -165,35 +164,6 @@ A Gymnasium-compatible wrapper couples the first two into a single RL environmen
 \caption{System architecture. Solid arrows show the simulation loop; dashed arrows show observation flow to the RL agent. The wrapper encapsulates the environment and reconstruction module behind a standard Gymnasium interface.}
 \label{fig:architecture2}
 \end{figure*}
-
-
-% Alternative:
-
-% \begin{figure*}[t]
-% \centering
-% \begin{tikzpicture}[
-%   box/.style={draw, thick, rounded corners=3pt, minimum width=32mm, minimum height=12mm, align=center, font=\small},
-%   arrow/.style={-{Latex[length=2.5mm]}, thick},
-%   dashedarrow/.style={-{Latex[length=2.5mm]}, thick, dashed},
-%   lbl/.style={font=\scriptsize\sffamily},
-% ]
-% \node[box] (robot) {Robot Policy\\(RL Agent)};
-% \node[box, below left=10mm and 14mm of robot] (env) {Robot Environment\\{\scriptsize\textit{(Reconstruct3D)}}};
-% \node[box, below right=10mm and 14mm of robot] (recon) {Reconstruction\\Policy};
-
-% \node[draw=black!60, dashed, rounded corners=5pt, fit=(env)(recon), inner sep=5mm] (group) {};
-% \node[below=1mm of group, lbl, align=center, text width=70mm] {RL Environment {\scriptsize\textit{(Gymnasium wrapper)}}};
-
-% \draw[arrow] (robot.west) -| node[lbl, near start, above] {action} (env.north);
-% \draw[arrow] (env.north east) |- node[lbl, near end, above] {reward} (robot.south west);
-% \draw[arrow] (env.south east) |- node[lbl, near end, above, text width=25mm, align=center] {RGB-D + pose} (recon.south west);
-% \draw[arrow] (recon.north west) |- node[lbl, near end, above, text width=22mm, align=center] {mesh / TSDF} (env.north east);
-% \draw[dashedarrow] (env.north west) |- node[lbl, near end, above] {pose, images} (robot.north west);
-% \draw[dashedarrow] (recon.north east) |- node[lbl, near end, above, text width=22mm, align=center] {reconstruction obs} (robot.north east);
-% \end{tikzpicture}
-% \caption{System architecture. Solid arrows show the simulation loop; dashed arrows show observation flow to the RL agent. The wrapper encapsulates the environment and reconstruction module behind a standard Gymnasium interface.}
-% \label{fig:architecture2}
-% \end{figure*}
 
 %----------------------------------------------------------------------
 \subsection{Robot Environment}
