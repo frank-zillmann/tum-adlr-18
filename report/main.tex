@@ -47,13 +47,81 @@ The abstract.
 \section{Introduction}
 
 \section{Methods}
+The task can be divided into the following components:
+\begin{itemize}
+    \item Robot Environment: The simulated environment in which the robot operates, including the computation of the 3D reconstruction errors and rewards.
+    \item Reconstruction Policy: The method used to reconstruct the 3D environment from the robot's observations.
+    \item Robot Policy: The reinforcement learning policy and it's neural architecture that decides the robot's actions based on it several observations.
+\end{itemize}
+From a Reinforcement Learning perspective the combination of Robot Environment (\texttt{Reconstruct3D.py}) and Reconstruction Policy (todo) can be seen as the total environment from a Reinforcement Learning perspective, while the Robot Policy is the agent that interacts with this environment. 
+This approach is also taken in the code which uses the \texttt{reconstruct3D_gym_wrapper.py} to handle all necessary interactions between robot environment and reconstruction policy and the creation of the observations for the robot policy.
+TODO shows a schematic overview of the interactions between the different components as well as the gym wrapper perspective.
+\begin{tikzpicture}[
+  box/.style={draw, thick, rounded corners=3pt, minimum width=35mm, minimum height=12mm, align=center},
+  arrow/.style={-{Latex[length=3mm]}, thick},
+  dashedarrow/.style={-{Latex[length=3mm]}, thick, dashed},
+  label/.style={font=\small\sffamily},
+]
+
+% --- Node placement (grid-like for zero clutter)
+\node[box] (robot)                      {Robot Policy};
+\node[box, below left=10mm and 18mm of robot]  (env)   {Robot Environment\\
+\textit{(reconstruct3D.py)}};
+\node[box, below right=10mm and 18mm of robot] (recon) {Reconstruction Policy};
+
+% --- RL observation region
+% \node[
+%   draw=blue!60, dashed, rounded corners=5pt,
+%   fit=(env)(recon),
+%   inner sep=5mm,
+% ] (group) {};
+
+\node[
+  draw=black!60, dashed, rounded corners=5pt,
+  fit=(env)(recon),
+  inner sep=5mm,
+] (group) {};
+
+\node[
+  below=2mm of group,
+  label,
+  align=center,
+  text width=80mm
+] {
+  RL Environment \textit{(reconstruct3D\_gym\_wrapper.py)}
+};
+
+% --- Arrows
+
+\draw[arrow] (robot.west) -| node[label, near start, above]
+  {robot action} (env.north);
+
+\draw[arrow] (env.north east) |- node[label, near end, above]
+  {reward} (robot.south west);
+
+\draw[arrow] (env.south east) |- node[label, near end, above]
+  {RGB-D image + camera pose} (recon.south west);
+
+\draw[arrow] (recon.north west) |- node[label, near end, above]
+  {reconstruction (SDF, mesh, etc.)} (env.north east);
+
+% --- Arrows for observations
+
+\draw[dashedarrow] (env.north west) |- node[label, near end, above]
+  {camera pose, images, etc.} (robot.north west);
+
+\draw[dashedarrow] (recon.north east) |-
+  node[label, near end, above] {reconstruction, uncertainty, etc.} (robot.north east);
+
+\end{tikzpicture}
+
 \subsection{Robot Environment}
 
 \subsection{Reconstruction Policy}
 
 \subsection{Robot Policy}
 
-\subsection{Reward Function}
+\subsection{Reconstruction Metrics and Reward Function}
 
 \subsection{Training (Reinforcement Learning)}
 
