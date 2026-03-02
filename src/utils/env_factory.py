@@ -19,7 +19,7 @@ def create_reconstruction_policy(policy_name: str):
         Reconstruction policy instance with default parameters
     """
     if policy_name == "open3d":
-        from reconstruction_policies.open3d_reconstruction_policy import (
+        from src.reconstruction_policies.open3d_reconstruction_policy import (
             Open3DReconstructionPolicy,
         )
         return Open3DReconstructionPolicy()
