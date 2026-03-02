@@ -12,6 +12,7 @@ import torch
 from src.reconstruction_policies.base import BaseReconstructionPolicy
 from nvblox_torch.mapper import Mapper, QueryType
 from nvblox_torch.mapper_params import MapperParams
+from nvblox_torch.sensor import Sensor
 
 
 class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
@@ -77,19 +78,30 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
 
         # Intrinsics and extrinsics stay on CPU
         if isinstance(camera_intrinsic, np.ndarray):
-            intrinsic_tensor = torch.from_numpy(camera_intrinsic).float()
+            K = camera_intrinsic.astype(np.float32)
         else:
-            intrinsic_tensor = camera_intrinsic.float().cpu()
+            K = camera_intrinsic.float().cpu().numpy()
 
         if isinstance(camera_extrinsic, np.ndarray):
             extrinsic_tensor = torch.from_numpy(camera_extrinsic).float()
         else:
             extrinsic_tensor = camera_extrinsic.float().cpu()
 
+        # nvblox 0.0.9: add_depth_frame() takes a Sensor object instead of an intrinsics tensor
+        h, w = depth_tensor.shape
+        sensor = Sensor.from_camera(
+            fu=float(K[0, 0]),
+            fv=float(K[1, 1]),
+            cu=float(K[0, 2]),
+            cv=float(K[1, 2]),
+            width=w,
+            height=h,
+        )
+
         self.nvblox_mapper.add_depth_frame(
             depth_frame=depth_tensor,
             t_w_c=extrinsic_tensor,
-            intrinsics=intrinsic_tensor,
+            sensor=sensor,
         )
 
     def reconstruct(
