@@ -15,7 +15,7 @@ git clone https://github.com/frank-zillmann/tum-adlr-18 --recursive
 cd tum-adlr-18
 ```
 
-2. Run the setup script:
+2. Run the setup script (tested on a Google Compute Engine VM with NVIDIA T4 GPU and `pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570` image):
 ```bash
 source ./install/setup.sh
 ```

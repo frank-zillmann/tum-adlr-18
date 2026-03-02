@@ -15,20 +15,23 @@ conda create -n "$ENV_NAME" python=3.10 -y
 conda activate "$ENV_NAME"
 
 echo ""
-# Detect CUDA
+# Detect CUDA: check for nvidia-smi binary OR /dev/nvidia0 device node.
+# nvidia-smi may fail (exit 9) if the driver isn't communicating yet, so use its mere presence.
 if command -v nvidia-smi &> /dev/null || [ -e /dev/nvidia0 ]; then
-    # VM Image: pytorch-2-7-cu128-ubuntu‑2404‑nvidia‑570
-    # pytorch-cuda=12.4 is the latest available on conda; CUDA 12.8 driver is backward compatible
-    echo "CUDA detected - installing PyTorch with CUDA support"
-    PYTORCH_PACKAGES="pytorch torchvision pytorch-cuda=12.4 -c pytorch -c nvidia"
+    # Install PyTorch from pip with the official cu128 index.
+    # nvblox_torch is compiled against official pip pytorch wheels (cu128 ABI)
+    # and can fail with conda installs ("undefined symbol: iJIT_NotifyEvent").
+    echo ""
+    echo "Step 2/4: CUDA detected - installing PyTorch cu128 (pip) and nvblox_torch (pip)..."
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+
+    # nvblox (NVIDIA 3D reconstruction, direct wheel install)
+    pip install https://github.com/nvidia-isaac/nvblox/releases/download/v0.0.9/nvblox_torch-0.0.9+cu12ubuntu24-py3-none-linux_x86_64.whl
 else
-    echo "No CUDA detected - installing CPU-only PyTorch"
-    PYTORCH_PACKAGES="pytorch torchvision cpuonly -c pytorch"
+    echo ""
+    echo "Step 2/4: No CUDA detected - Installing PyTorch (conda, cpu)..."
+    conda install pytorch torchvision cpuonly -c pytorch -y
 fi
-# Install PyTorch
-echo ""
-echo "Step 2/4: Installing PyTorch packages: $PYTORCH_PACKAGES ..."
-conda install $PYTORCH_PACKAGES -y
 
 # Install remaining packages from yml
 echo ""
