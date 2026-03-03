@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 import numpy as np
 import torch
@@ -26,7 +27,7 @@ from src.utils.callbacks import TimingCallback, LoggingEvalCallback, LoggingTrai
 from configs.train_config import TrainConfig
 
 
-def train(config: TrainConfig, checkpoint: str = None):
+def train(config: TrainConfig, checkpoint: Optional[str] = None):
     """Train PPO agent."""
     # Setup paths
     run_name = f"ppo_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -39,15 +40,32 @@ def train(config: TrainConfig, checkpoint: str = None):
     # Create environments (with timing collection if benchmark enabled)
     # Note: timing only works with DummyVecEnv (n_envs=1), not SubprocVecEnv
     collect_timing = config.benchmark and config.n_envs == 1
-    env_fn = lambda i: make_env_fn(config, seed=i, collect_timing=collect_timing)
+    train_env_fns = [
+        make_env_fn(config, seed=i, collect_timing=collect_timing)
+        for i in range(config.n_envs)
+    ]
     train_env = (
-        SubprocVecEnv([env_fn(i) for i in range(config.n_envs)])
+        SubprocVecEnv(train_env_fns)  # type: ignore[arg-type]
         if config.n_envs > 1
-        else DummyVecEnv([env_fn(0)])
+        else DummyVecEnv(train_env_fns)  # type: ignore[arg-type]
     )
-    # Eval env logs images and rewards to log_dir/eval_data/
+    
+    # Eval envs: mirror vectorization for n_envs > 1.
+    # Only one env gets eval_log_dir to avoid file collisions.
     eval_log_dir = log_dir / "eval_data"
-    eval_env = DummyVecEnv([make_env_fn(config, seed=42, eval_log_dir=eval_log_dir)])
+    eval_env_fns = [
+        make_env_fn(
+            config,
+            seed=42 + i,
+            eval_log_dir=eval_log_dir if i == 0 else None,
+        )
+        for i in range(config.n_envs)
+    ]
+    eval_env = (
+        SubprocVecEnv(eval_env_fns)  # type: ignore[arg-type]
+        if config.n_envs > 1
+        else DummyVecEnv(eval_env_fns)  # type: ignore[arg-type]
+    )
 
     # Build extractors config based on configured observations
     extractors_config = []
