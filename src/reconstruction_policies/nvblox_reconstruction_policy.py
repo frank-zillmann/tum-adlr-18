@@ -5,8 +5,6 @@ import os
 # Must be set before importing nvblox_torch or any library using glog
 os.environ["GLOG_minloglevel"] = "1"
 
-import gc
-
 import numpy as np
 import torch
 from src.reconstruction_policies.base import BaseReconstructionPolicy
@@ -243,13 +241,15 @@ class NvbloxReconstructionPolicy(BaseReconstructionPolicy):
         return sdf_grid, weights_grid
 
     def reset(self, **kwargs):
-        # Try to free all resources: clear voxel data, then destroy mapper, force GC, synchronize GPU, then recreate
+        # clear() frees all voxel block data in the C++ mapper (GPU memory).
         self.nvblox_mapper.clear()
-        del self.nvblox_mapper
-        gc.collect()
-        torch.cuda.synchronize()
 
-        self.nvblox_mapper = Mapper(
-            voxel_sizes_m=self.voxel_size,
-            mapper_parameters=self._mapper_params,
-        )
+        # The following was a workaround for a memory leak in render_mesh_open3d (now removed).
+        # Kept here for reference in case a leak reappears.
+        # del self.nvblox_mapper
+        # gc.collect()
+        # torch.cuda.synchronize()
+        # self.nvblox_mapper = Mapper(
+        #     voxel_sizes_m=self.voxel_size,
+        #     mapper_parameters=self._mapper_params,
+        # )
