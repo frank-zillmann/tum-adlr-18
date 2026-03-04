@@ -50,22 +50,10 @@ def train(config: TrainConfig, checkpoint: Optional[str] = None):
         else DummyVecEnv(train_env_fns)  # type: ignore[arg-type]
     )
     
-    # Eval envs: mirror vectorization for n_envs > 1.
-    # Only one env gets eval_log_dir to avoid file collisions.
+    # Eval env: always a single env to limit memory usage
+    # Logs images and rewards to log_dir/eval_data/.
     eval_log_dir = log_dir / "eval_data"
-    eval_env_fns = [
-        make_env_fn(
-            config,
-            seed=42 + i,
-            eval_log_dir=eval_log_dir if i == 0 else None,
-        )
-        for i in range(config.n_envs)
-    ]
-    eval_env = (
-        SubprocVecEnv(eval_env_fns)  # type: ignore[arg-type]
-        if config.n_envs > 1
-        else DummyVecEnv(eval_env_fns)  # type: ignore[arg-type]
-    )
+    eval_env = DummyVecEnv([make_env_fn(config, seed=42, eval_log_dir=eval_log_dir)])
 
     # Build extractors config based on configured observations
     extractors_config = []
