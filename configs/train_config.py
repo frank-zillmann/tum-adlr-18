@@ -41,7 +41,7 @@ class TrainConfig:
 
     # PPO and training
     total_timesteps: int = 2_000_000
-    n_envs: int = 4  # Number of parallel environments, PPO default is 1
+    n_envs: int = 1  # Number of parallel environments, PPO default is 1
     lr: float = 3e-4  # Learning rate
     n_steps: int = 512  # Steps per env before update
     batch_size: int = 128  # Minibatch size for gradient updates, PPO default is 64
@@ -52,8 +52,8 @@ class TrainConfig:
     ent_coef: float = 0.01  # Entropy bonus for exploration, PPO default is 0.0
     seed: int = 0  # Random seed for PPO (not for envs)
 
-    checkpoint_freq: int = 25_000 # every 100_000 steps, because n_envs=4
-    eval_freq: int = 25_000 # every 100_000 steps, because n_envs=4
+    checkpoint_freq: int = 100_000 # every n_envs * checkpoint_freq steps
+    eval_freq: int = 100_000 # every n_envs * eval_freq steps
     n_eval_episodes: int = 10
 
     # Logging
